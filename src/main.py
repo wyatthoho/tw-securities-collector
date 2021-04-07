@@ -1,8 +1,9 @@
+import os
 import time
 import datetime
 import pandas as pd
 import requests
-import matplotlib.pyplot as plt
+import myPlot
 from bs4 import BeautifulSoup
 
 
@@ -115,27 +116,21 @@ def GetTaiwanStockPrice(yearStr, monthStr, yearEnd, monthEnd, stockNo):
 
     return pd.DataFrame(table)
 
+def TransRocToGregorian(rocDate, splitter='/'):
+    '''
+    Transform the ROC calendar to Gregorian calendar
+    '''
+    rocYear = rocDate.split(splitter)[0]
+    remaining = rocDate[len(rocYear):]
+    gregorian = str(int(rocYear) + 1911) + remaining
 
-def PlotData(figIdx, stockNo, xData, yData):
-    yData = [float(data) for data in yData]
-
-    fig = plt.figure(num=figIdx, figsize=(6,3), tight_layout=True)
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(xData, yData)
-
-    xTickNum = 8
-    xDelta = (len(xData)-1) // (xTickNum-1)
-    xTick = [xData[itr*xDelta] for itr in range(xTickNum)]
-
-    ax.set_xticks(xTick)
-    ax.set_xticklabels(xTick, rotation='vertical')
-    ax.set_xlim((xTick[0], xTick[-1]))
-    ax.grid(color='0.2', linestyle='-', linewidth=0.1)
-    ax.set_title('{}'.format(stockNo), family='Arial', fontsize=14)
-    plt.show()
+    return gregorian
 
 
 if __name__ == '__main__':
+    getData = True
+    plotData = True
+
     stockNo = 2330
     listedDate = CrawlTaiwanStockListedDate(stockNo)
     traceableDate = datetime.date(2010, 1, 1)
@@ -146,11 +141,22 @@ if __name__ == '__main__':
     else:
         yearStr, monthStr = listedDate.year, listedDate.month
 
-    # yearEnd, monthEnd = 2010, 5
     yearEnd, monthEnd = today.year, today.month
 
-    fileName = '{:4d}_{:4d}{:02d}_{:4d}{:02d}.csv'.format(stockNo, yearStr, monthStr, yearEnd, monthEnd)
-    myTable = GetTaiwanStockPrice(yearStr, monthStr, yearEnd, monthEnd, stockNo)
-    myTable.to_csv(fileName)
+    fileName = '{:4d}_{:4d}{:02d}_{:4d}{:02d}'.format(stockNo, yearStr, monthStr, yearEnd, monthEnd)
+    cwd = os.getcwd()
+    csvPath = os.path.join(cwd, 'data\\{}.csv'.format(fileName))
+    pngPath = os.path.join(cwd, 'data\\{}.png'.format(fileName))
 
-    PlotData(figIdx=1, stockNo=stockNo, xData=myTable['日期'], yData=myTable['收盤價'])
+    # Crawl and Save csv
+    if getData:
+        myTable = GetTaiwanStockPrice(yearStr, monthStr, yearEnd, monthEnd, stockNo)
+        myTable.to_csv(csvPath)
+
+    # Read csv and Plot png
+    if plotData:
+        myTable = pd.read_csv(csvPath)
+        xData = [TransRocToGregorian(rocDate, '/') for rocDate in myTable['日期']]
+        yData = [float(data) for data in myTable['收盤價']]
+
+        myPlot.PlotData(figIdx=1, filePath=pngPath, title=stockNo, xData=xData, yData=yData)
