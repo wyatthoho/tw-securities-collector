@@ -3,8 +3,8 @@ import time
 import datetime
 import pandas as pd
 import requests
-import myPlot
 from bs4 import BeautifulSoup
+import myPlot
 
 
 def CrawlTaiwanStockListedDate(stockNo):
