@@ -40,6 +40,8 @@ if __name__ == '__main__':
         xData = [calendarTransform.TransRocToGregorian(rocDate, '/') for rocDate in myTable['日期']]
         yData = [float(data) for data in myTable['收盤價']]
 
-        smartPlot.CreateBilinearPlot(figIdx=1, filePath=pngPath, title=stockNo, xData=xData, yData=yData)
+        priceFig = smartPlot.BilinearFig(figIdx=1)
+        priceFig.plotData(title=stockNo, xData=xData, yData=yData)
+        priceFig.saveFig(pngPath)
     
     print('Done ^.< ')
