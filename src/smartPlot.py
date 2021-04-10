@@ -20,7 +20,7 @@ def FindYtick(data, tickNum):
     return tick
 
 
-def PlotData(figIdx, filePath, title, xData, yData):
+def CreateBilinearPlot(figIdx, filePath, title, xData, yData):
     facecolor = (0.12, 0.12, 0.16)
     edgecolor = (0.92, 0.92, 0.92)
     linecolor = 'violet'
