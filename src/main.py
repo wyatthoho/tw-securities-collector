@@ -13,7 +13,7 @@ if __name__ == '__main__':
     plotData = True
 
     stockNo = 2330
-    listedDate = crawlStock.CrawlTaiwanStockListedDate(stockNo)
+    listedDate = crawlStock.CrawlListedDate(stockNo)
     traceableDate = datetime.date(2010, 1, 1)
     today = datetime.date.today()
 

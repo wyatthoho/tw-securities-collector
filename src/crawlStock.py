@@ -5,7 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def CrawlTaiwanStockListedDate(stockNo):
+def CrawlListedDate(stockNo):
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     payload = {'owncode': str(stockNo), 'stockname': ''}
     headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
@@ -25,7 +25,7 @@ def CrawlTaiwanStockListedDate(stockNo):
     return listedDate
 
 
-def CrawlTaiwanStockPrice(date, stockNo):
+def CrawlPrice(date, stockNo):
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     payload = {'response': 'json', 'date': str(date), 'stockNo': str(stockNo)}
     headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
@@ -62,7 +62,7 @@ def CheckDateOrder(yearStr, monthStr, yearEnd, monthEnd):
         raise Exception('The start date exceed the end date')
 
 
-def PutValuesIntoTable(content, table):
+def PutIntoTable(content, table):
     fields = content['fields']
     data = content['data']
 
@@ -97,8 +97,8 @@ def GetTaiwanStockPrice(yearStr, monthStr, yearEnd, monthEnd, stockNo):
     while True:
         date = datetime.date(year, month, 1)
         dateStr = date.isoformat().replace('-', '')
-        content = CrawlTaiwanStockPrice(dateStr, stockNo)
-        table = PutValuesIntoTable(content, table)
+        content = CrawlPrice(dateStr, stockNo)
+        table = PutIntoTable(content, table)
 
         suspendDuration = 5
         time.sleep(suspendDuration)
