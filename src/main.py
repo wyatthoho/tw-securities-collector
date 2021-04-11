@@ -9,8 +9,15 @@ import calendarTransform
 if __name__ == '__main__':
     print('Start..')
     
-    getData = True
-    plotData = True
+    # Find the listed companies and ETF in Taiwan
+    cwd = os.getcwd()
+    csvPath = os.path.join(cwd, 'data\\TWStockList.csv')
+
+    myTable = crawlStock.CrawlStockNoList()
+    myTable.to_csv(csvPath)
+    
+    getData = False
+    plotData = False
 
     stockNo = 2330
     listedDate = crawlStock.CrawlListedDate(stockNo)
@@ -25,7 +32,6 @@ if __name__ == '__main__':
     yearEnd, monthEnd = today.year, today.month
 
     fileName = '{:4d}_{:4d}{:02d}_{:4d}{:02d}'.format(stockNo, yearStr, monthStr, yearEnd, monthEnd)
-    cwd = os.getcwd()
     csvPath = os.path.join(cwd, 'data\\{}.csv'.format(fileName))
     pngPath = os.path.join(cwd, 'data\\{}.png'.format(fileName))
 
