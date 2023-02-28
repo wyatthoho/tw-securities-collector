@@ -1,9 +1,9 @@
-import os
+import calendarTransform
+import crawlStock
 import datetime
+import os
 import pandas as pd
 import smartPlot
-import crawlStock
-import calendarTransform
 
 
 if __name__ == '__main__':
