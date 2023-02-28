@@ -38,16 +38,18 @@ def PutStockListTable(table, stockNo, stockName, listedOrOTC, stockType, industr
 
 
 def CrawlStockNoList():
+    '''
+    Collect the List of Taiwan Stock Exchange Listed Companies and ETFs.
+    '''
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
     response = requests.get(url, headers=headers)
-
     soup = BeautifulSoup(response.text, 'html.parser')
+
     colIdx = 0
     table = {}
     for element in soup.find_all('td'):
         examCurrentRow = False
-
         if colIdx == 2:
             stockNo = element.get_text().strip()
         elif colIdx == 3:
@@ -60,37 +62,38 @@ def CrawlStockNoList():
             industry = element.get_text()
         elif colIdx == 7:
             stockListedDate = element.get_text()
-
         if colIdx == 9:
             colIdx = 0
             examCurrentRow = True
         else:
             colIdx += 1
-        
         if examCurrentRow:
             table = PutStockListTable(table, stockNo, stockName, listedOrOTC, stockType, industry, stockListedDate)
-
     return pd.DataFrame(table)
 
 
-def CrawlListedDate(stockNo):
+def GetTrackingTimeRange(stockNo):
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     payload = {'owncode': str(stockNo), 'stockname': ''}
     headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
     response = requests.get(url, params=payload, headers=headers)
-
     soup = BeautifulSoup(response.text, 'html.parser')
+
     for element in soup.find_all('td'):
         text = element.get_text()
-
         condition1 = len(text.split('/')) == 3
         condition2 = text.replace('/', '').isdigit()
-
         if condition1 and condition2:
             year, month, day = [int(digit) for digit in text.split('/')]
             listedDate = datetime.date(year, month, day)
 
-    return listedDate
+    traceableDate = datetime.date(2010, 1, 1)
+    if listedDate < traceableDate:
+        yearStr, monthStr = traceableDate.year, traceableDate.month
+    else:
+        yearStr, monthStr = listedDate.year, listedDate.month
+    today = datetime.date.today()
+    return yearStr, monthStr, today.year, today.month
 
 
 def CrawlPrice(date, stockNo):
@@ -107,7 +110,6 @@ def CrawlPrice(date, stockNo):
     response = requests.get(url, params=payload, headers=headers)
     msg = 'Loading: {}'.format(response.url)
     print(msg)
-
     return eval(response.text)
 
 
@@ -151,7 +153,7 @@ def PutHistoryTable(content, table):
     return table
 
 
-def GetTaiwanStockPrice(yearStr, monthStr, yearEnd, monthEnd, stockNo):
+def GetTaiwanStockPrice(stockNo, yearStr, monthStr, yearEnd, monthEnd):
     try:
         CheckDateOrder(yearStr, monthStr, yearEnd, monthEnd)
     except Exception as e:
@@ -183,50 +185,22 @@ def GetTaiwanStockPrice(yearStr, monthStr, yearEnd, monthEnd, stockNo):
     return pd.DataFrame(table)
 
 
-
-
 if __name__ == '__main__':
-    print('Start..')
-
-    # Get TW Stock list
+    twStockList = CrawlStockNoList()
+    stockNo = 2330
+    timeRange = GetTrackingTimeRange(stockNo)    
+    twStockPrice = GetTaiwanStockPrice(stockNo, *timeRange)
+    
+    # Output
     cwd = os.getcwd()
     csvPath = os.path.join(cwd, 'data\\TWStockList.csv')
-    myTable = CrawlStockNoList()
-    myTable.to_csv(csvPath)
-    
-    # Settings
-    getData = True
-    plotData = True
-    stockNo = 2330
-
-    listedDate = CrawlListedDate(stockNo)
-    traceableDate = datetime.date(2010, 1, 1)
-    today = datetime.date.today()
-
-    if listedDate < traceableDate:
-        yearStr, monthStr = traceableDate.year, traceableDate.month
-    else:
-        yearStr, monthStr = listedDate.year, listedDate.month
-
-    yearEnd, monthEnd = today.year, today.month
-
-    fileName = '{:4d}_{:4d}{:02d}_{:4d}{:02d}'.format(stockNo, yearStr, monthStr, yearEnd, monthEnd)
+    twStockList.to_csv(csvPath)
+    fileName = '{:4d}_{:4d}{:02d}_{:4d}{:02d}'.format(stockNo, *timeRange)
     csvPath = os.path.join(cwd, 'data\\{}.csv'.format(fileName))
     pngPath = os.path.join(cwd, 'data\\{}.png'.format(fileName))
-
-    # Crawl and Save csv
-    if getData:
-        myTable = GetTaiwanStockPrice(yearStr, monthStr, yearEnd, monthEnd, stockNo)
-        myTable.to_csv(csvPath)
-
-    # Read csv and Plot png
-    if plotData:
-        myTable = pd.read_csv(csvPath)
-        xData = [calendarTransform.TransRocToGregorian(rocDate, '/') for rocDate in myTable['日期']]
-        yData = [float(data) for data in myTable['收盤價']]
-
-        priceFig = smartPlot.BilinearFig(figIdx=1)
-        priceFig.plotData(title=stockNo, xData=xData, yData=yData)
-        priceFig.saveFig(pngPath)
-    
-    print('Done ^.< ')
+    twStockPrice.to_csv(csvPath)
+    xData = [calendarTransform.TransRocToGregorian(rocDate, '/') for rocDate in twStockPrice['日期']]
+    yData = [float(data) for data in twStockPrice['收盤價']]
+    priceFig = smartPlot.BilinearFig(figIdx=1)
+    priceFig.plotData(title=stockNo, xData=xData, yData=yData)
+    priceFig.saveFig(pngPath)
