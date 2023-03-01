@@ -69,7 +69,7 @@ def crawl_companies_etfs():
     return pd.DataFrame(table)
 
 
-def get_tracking_time_range(stockNo):
+def crawl_listed_date(stockNo):
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     payload = {'owncode': str(stockNo), 'stockname': ''}
     headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
@@ -83,14 +83,7 @@ def get_tracking_time_range(stockNo):
         if condition1 and condition2:
             year, month, day = [int(digit) for digit in text.split('/')]
             listedDate = datetime.date(year, month, day)
-
-    traceableDate = datetime.date(2010, 1, 1)
-    if listedDate < traceableDate:
-        yearStr, monthStr = traceableDate.year, traceableDate.month
-    else:
-        yearStr, monthStr = listedDate.year, listedDate.month
-    today = datetime.date.today()
-    return yearStr, monthStr, today.year, today.month
+    return listedDate
 
 
 def CrawlPrice(date, stockNo):
@@ -150,7 +143,17 @@ def PutHistoryTable(content, table):
     return table
 
 
-def get_stock_price(stockNo, yearStr, monthStr, yearEnd, monthEnd):
+def crawl_stock_price(stock_idx):
+    listed_date = crawl_listed_date(stock_idx)
+    traceable_date = datetime.date(2010, 1, 1)
+    if listed_date < traceable_date:
+        yearStr, monthStr = traceable_date.year, traceable_date.month
+    else:
+        yearStr, monthStr = listed_date.year, listed_date.month
+    
+    today = datetime.date.today()
+    yearEnd, monthEnd = today.year, today.month
+
     try:
         CheckDateOrder(yearStr, monthStr, yearEnd, monthEnd)
     except Exception as e:
@@ -164,7 +167,7 @@ def get_stock_price(stockNo, yearStr, monthStr, yearEnd, monthEnd):
     while True:
         date = datetime.date(year, month, 1)
         dateStr = date.isoformat().replace('-', '')
-        content = CrawlPrice(dateStr, stockNo)
+        content = CrawlPrice(dateStr, stock_idx)
         table = PutHistoryTable(content, table)
 
         suspendDuration = 5
@@ -184,7 +187,5 @@ def get_stock_price(stockNo, yearStr, monthStr, yearEnd, monthEnd):
 
 if __name__ == '__main__':
     companies_etfs = crawl_companies_etfs()
-    stock_idx = 2330
-    time_range = get_tracking_time_range(stock_idx)    
-    stock_price = get_stock_price(stock_idx, *time_range)
-    
+    stock_price = crawl_stock_price(stock_idx=2330)
+
