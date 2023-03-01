@@ -1,9 +1,6 @@
-import calendarTransform
 import datetime
-import os
 import pandas as pd
 import requests
-import smartPlot
 import time
 from bs4 import BeautifulSoup
 
@@ -37,7 +34,7 @@ def PutStockListTable(table, stockNo, stockName, listedOrOTC, stockType, industr
     return table
 
 
-def CrawlStockNoList():
+def crawl_companies_etfs():
     '''
     Collect the List of Taiwan Stock Exchange Listed Companies and ETFs.
     '''
@@ -72,7 +69,7 @@ def CrawlStockNoList():
     return pd.DataFrame(table)
 
 
-def GetTrackingTimeRange(stockNo):
+def get_tracking_time_range(stockNo):
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     payload = {'owncode': str(stockNo), 'stockname': ''}
     headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
@@ -153,7 +150,7 @@ def PutHistoryTable(content, table):
     return table
 
 
-def GetTaiwanStockPrice(stockNo, yearStr, monthStr, yearEnd, monthEnd):
+def get_stock_price(stockNo, yearStr, monthStr, yearEnd, monthEnd):
     try:
         CheckDateOrder(yearStr, monthStr, yearEnd, monthEnd)
     except Exception as e:
@@ -186,21 +183,8 @@ def GetTaiwanStockPrice(stockNo, yearStr, monthStr, yearEnd, monthEnd):
 
 
 if __name__ == '__main__':
-    twStockList = CrawlStockNoList()
-    stockNo = 2330
-    timeRange = GetTrackingTimeRange(stockNo)    
-    twStockPrice = GetTaiwanStockPrice(stockNo, *timeRange)
+    companies_etfs = crawl_companies_etfs()
+    stock_idx = 2330
+    time_range = get_tracking_time_range(stock_idx)    
+    stock_price = get_stock_price(stock_idx, *time_range)
     
-    # Output
-    cwd = os.getcwd()
-    csvPath = os.path.join(cwd, 'data\\TWStockList.csv')
-    twStockList.to_csv(csvPath)
-    fileName = '{:4d}_{:4d}{:02d}_{:4d}{:02d}'.format(stockNo, *timeRange)
-    csvPath = os.path.join(cwd, 'data\\{}.csv'.format(fileName))
-    pngPath = os.path.join(cwd, 'data\\{}.png'.format(fileName))
-    twStockPrice.to_csv(csvPath)
-    xData = [calendarTransform.TransRocToGregorian(rocDate, '/') for rocDate in twStockPrice['日期']]
-    yData = [float(data) for data in twStockPrice['收盤價']]
-    priceFig = smartPlot.BilinearFig(figIdx=1)
-    priceFig.plotData(title=stockNo, xData=xData, yData=yData)
-    priceFig.saveFig(pngPath)
