@@ -13,58 +13,30 @@ def crawl_companies_etfs():
     headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
-
-    colIdx = 0
-    table = {}
-    for element in soup.find_all('td'):
-        examCurrentRow = False
-        if colIdx == 2:
-            stockNo = element.get_text().strip()
-        elif colIdx == 3:
-            stockName = element.get_text()
-        elif colIdx == 4:
-            listedOrOTC = element.get_text()
-        elif colIdx == 5:
-            stockType = element.get_text()
-        elif colIdx == 6:
-            industry = element.get_text()
-        elif colIdx == 7:
-            stockListedDate = element.get_text()
-        if colIdx == 9:
-            colIdx = 0
-            examCurrentRow = True
-        else:
-            colIdx += 1
-        if examCurrentRow:
-            table = append_stock_data(table, stockNo, stockName, listedOrOTC, stockType, industry, stockListedDate)
-    return pd.DataFrame(table)
+    table = soup.find('table', class_='h4')
+    first_row = table.find('tr')
+    cols_all = first_row.text.split('\n')
+    cols_ref = [text for text in cols_all if text]
+    df = pd.DataFrame(columns=cols_ref)
+    rows = first_row.find_next_siblings('tr')
+    for row in rows:
+        data_all = row.text.split('\n')
+        data_ref = {name: cont for name, cont in zip(cols_all, data_all) if name}
+        df = append_stock_data(df, data_ref)
+    return df
 
 
-def append_stock_data(table, stockNo, stockName, listedOrOTC, stockType, industry, stockListedDate):
-    condition1 = stockNo[-1].isalpha()
-    condition2 = stockNo[0].isalpha()
-    condition3 = listedOrOTC not in ['上櫃', '期貨及選擇權', '興櫃一般板', '公開發行', '創櫃版']
-    condition4 = stockType in ['ETF', '股票']
-
-    if not (condition1 or condition2) and condition3 and condition4:
-        getThisStock = True
+def append_stock_data(df_main, data: dict):
+    cond1 = not data['有價證券代號'][-1].isalpha()
+    cond2 = not data['有價證券代號'][0].isalpha()
+    cond3 = data['市場別'] not in ['上櫃', '期貨及選擇權', '興櫃一般板', '公開發行', '創櫃版']
+    cond4 = data['有價證券別'] in ['ETF', '股票']
+    conds = [cond1, cond2, cond3, cond4]
+    if all(conds):
+        df_data = pd.DataFrame([data])
+        return pd.concat([df_main, df_data], ignore_index=True)
     else:
-        getThisStock = False
-
-    if getThisStock:
-        if len(table) == 0:
-            table['有價證券代號'] = [stockNo]
-            table['有價證券名稱'] = [stockName]
-            table['有價證券別'] = [stockType]
-            table['產業別'] = [industry]
-            table['發行日'] = [stockListedDate]
-        else:
-            table['有價證券代號'].append(stockNo)
-            table['有價證券名稱'].append(stockName)
-            table['有價證券別'].append(stockType)
-            table['產業別'].append(industry)
-            table['發行日'].append(stockListedDate)
-    return table
+        return df_main
 
 
 def crawl_stock_price(stock_idx):
@@ -173,5 +145,5 @@ def append_history(content, table):
 
 if __name__ == '__main__':
     companies_etfs = crawl_companies_etfs()
-    stock_price = crawl_stock_price(stock_idx=2330)
+    # stock_price = crawl_stock_price(stock_idx=2330)
 
