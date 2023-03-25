@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 
+
 def get_companies_etfs() -> pd.DataFrame:
     '''
     Collect the List of Taiwan Stock Exchange Listed Companies and ETFs.
@@ -17,19 +18,21 @@ def get_companies_etfs() -> pd.DataFrame:
     headers = {'user-agent': AGENT}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
-    
+
     # Initialize data frame
     table = soup.find('table', class_='h4')
     first_row = table.find('tr')
     cols_all = first_row.text.split('\n')
     cols_tgt = [text for text in cols_all if text]
     df = pd.DataFrame(columns=cols_tgt)
-    
+
     # Collect row data
     rows = first_row.find_next_siblings('tr')
     for row in rows:
         data_all = row.text.split('\n')
-        data_tgt = {name: cont for name, cont in zip(cols_all, data_all) if name}
+        data_tgt = {
+            name: cont for name, cont in zip(cols_all, data_all) if name
+        }
         df = append_stock_data(df, data_tgt)
     return df
 
@@ -100,7 +103,11 @@ def iter_time_tange(stock_idx: int, date_str: datetime.date, date_end: datetime.
 def crawl_stock_month_prices(date: datetime.date, stock_idx: int) -> dict:
     date_input = str(date).replace('-', '')
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-    payload = {'response': 'json', 'date': date_input, 'stockNo': str(stock_idx)}
+    payload = {
+        'response': 'json',
+        'date': date_input,
+        'stockNo': str(stock_idx)
+    }
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     date_show = date.strftime('%Y/%m')
@@ -111,9 +118,9 @@ def crawl_stock_month_prices(date: datetime.date, stock_idx: int) -> dict:
 
 def get_next_month(date: datetime.date) -> datetime.date:
     if date.month < 12:
-        return datetime.date(date.year, date.month + 1, 1)
+        return datetime.date(date.year, date.month+1, 1)
     else:
-        return datetime.date(date.year + 1, 1, 1)
+        return datetime.date(date.year+1, 1, 1)
 
 
 if __name__ == '__main__':
