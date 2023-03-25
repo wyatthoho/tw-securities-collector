@@ -1,28 +1,36 @@
 import datetime
+import time
+
 import pandas as pd
 import requests
-import time
 from bs4 import BeautifulSoup
 
+AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 
 def crawl_companies_etfs():
     '''
     Collect the List of Taiwan Stock Exchange Listed Companies and ETFs.
     '''
+    
+    # Get the soup
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
-    headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
+    headers = {'user-agent': AGENT}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Initialize data frame
     table = soup.find('table', class_='h4')
     first_row = table.find('tr')
     cols_all = first_row.text.split('\n')
-    cols_ref = [text for text in cols_all if text]
-    df = pd.DataFrame(columns=cols_ref)
+    cols_tgt = [text for text in cols_all if text]
+    df = pd.DataFrame(columns=cols_tgt)
+    
+    # Collect row data
     rows = first_row.find_next_siblings('tr')
     for row in rows:
         data_all = row.text.split('\n')
-        data_ref = {name: cont for name, cont in zip(cols_all, data_all) if name}
-        df = append_stock_data(df, data_ref)
+        data_tgt = {name: cont for name, cont in zip(cols_all, data_all) if name}
+        df = append_stock_data(df, data_tgt)
     return df
 
 
@@ -80,7 +88,7 @@ def crawl_stock_price(stock_idx):
 def crawl_listed_date(stockNo):
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     payload = {'owncode': str(stockNo), 'stockname': ''}
-    headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
+    headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -104,7 +112,7 @@ def check_time_range(yearStr, monthStr, yearEnd, monthEnd):
 def crawl_stock(date, stockNo):
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     payload = {'response': 'json', 'date': str(date), 'stockNo': str(stockNo)}
-    headers = {'user-agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'}
+    headers = {'user-agent': AGENT}
     
     try:
         check_date_fmt(date)
