@@ -8,11 +8,10 @@ from bs4 import BeautifulSoup
 
 AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 
-def crawl_companies_etfs() -> pd.DataFrame:
+def get_companies_etfs() -> pd.DataFrame:
     '''
     Collect the List of Taiwan Stock Exchange Listed Companies and ETFs.
     '''
-    
     # Get the soup
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     headers = {'user-agent': AGENT}
@@ -48,18 +47,21 @@ def append_stock_data(df_main: pd.DataFrame, data: dict) -> pd.DataFrame:
         return df_main
 
 
-def crawl_stock_price(stock_idx: int) -> pd.DataFrame:
+def get_stock_prices(stock_idx: int) -> pd.DataFrame:
+    '''
+    Collect the prices for the specific stock index for all time.
+    '''
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     payload = {'owncode': str(stock_idx), 'stockname': ''}
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
-    date_listed = get_listed_date(soup)
-    date_str, date_end = get_time_range(date_listed)
-    return collect_price(stock_idx, date_str, date_end)
+    date_listed = search_listed_date(soup)
+    date_str, date_end = define_time_range(date_listed)
+    return iter_time_tange(stock_idx, date_str, date_end)
 
 
-def get_listed_date(soup: BeautifulSoup) -> datetime.date:
+def search_listed_date(soup: BeautifulSoup) -> datetime.date:
     td_all = soup.find_all('td')
     for element in td_all:
         text = element.get_text()
@@ -70,7 +72,7 @@ def get_listed_date(soup: BeautifulSoup) -> datetime.date:
             return datetime.date(year, month, day)
 
 
-def get_time_range(date_listed: datetime.date) -> Tuple[datetime.date, datetime.date]:
+def define_time_range(date_listed: datetime.date) -> Tuple[datetime.date, datetime.date]:
     date_traceable = datetime.date(2010, 1, 1)
     if date_listed < date_traceable:
         date_str = date_traceable
@@ -79,35 +81,35 @@ def get_time_range(date_listed: datetime.date) -> Tuple[datetime.date, datetime.
     return date_str, datetime.date.today()
 
 
-def collect_price(stock_idx: int, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
+def iter_time_tange(stock_idx: int, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
     sleep_time = 5
-    df = pd.DataFrame()
+    df_main = pd.DataFrame()
     date = date_str
     while True:
         if date <= date_end:
-            content = crawl_stock(date, stock_idx)
+            content = crawl_stock_month_prices(date, stock_idx)
             df_data = pd.DataFrame(content['data'], columns=content['fields'])
-            df = pd.concat([df, df_data], ignore_index=True)
+            df_main = pd.concat([df_main, df_data], ignore_index=True)
             date = get_next_month(date)
             time.sleep(sleep_time)
         else:
             break
-    return pd.DataFrame(df)
+    return df_main
 
 
-def crawl_stock(date: datetime.date, stock_idx: int):
+def crawl_stock_month_prices(date: datetime.date, stock_idx: int) -> dict:
     date_input = str(date).replace('-', '')
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     payload = {'response': 'json', 'date': date_input, 'stockNo': str(stock_idx)}
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     date_show = date.strftime('%Y/%m')
-    msg = f'Collecting stock id: {stock_idx:d}, region: {date_show:s}'
+    msg = f'Collecting {stock_idx} stock prices in {date_show}..'
     print(msg)
     return eval(response.text)
 
 
-def get_next_month(date: datetime.date):
+def get_next_month(date: datetime.date) -> datetime.date:
     if date.month < 12:
         return datetime.date(date.year, date.month + 1, 1)
     else:
@@ -115,5 +117,5 @@ def get_next_month(date: datetime.date):
 
 
 if __name__ == '__main__':
-    companies_etfs = crawl_companies_etfs()
-    stock_price = crawl_stock_price(stock_idx=2330)
+    companies_etfs = get_companies_etfs()
+    stock_prices = get_stock_prices(stock_idx=2330)
