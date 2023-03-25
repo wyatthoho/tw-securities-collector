@@ -1,5 +1,6 @@
 import datetime
 import time
+from typing import Tuple
 
 import pandas as pd
 import requests
@@ -7,7 +8,7 @@ from bs4 import BeautifulSoup
 
 AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 
-def crawl_companies_etfs():
+def crawl_companies_etfs() -> pd.DataFrame:
     '''
     Collect the List of Taiwan Stock Exchange Listed Companies and ETFs.
     '''
@@ -34,7 +35,7 @@ def crawl_companies_etfs():
     return df
 
 
-def append_stock_data(df_main, data: dict):
+def append_stock_data(df_main: pd.DataFrame, data: dict) -> pd.DataFrame:
     cond1 = not data['有價證券代號'][-1].isalpha()
     cond2 = not data['有價證券代號'][0].isalpha()
     cond3 = data['市場別'] not in ['上櫃', '期貨及選擇權', '興櫃一般板', '公開發行', '創櫃版']
@@ -47,111 +48,72 @@ def append_stock_data(df_main, data: dict):
         return df_main
 
 
-def crawl_stock_price(stock_idx):
-    listed_date = crawl_listed_date(stock_idx)
-    traceable_date = datetime.date(2010, 1, 1)
-    if listed_date < traceable_date:
-        yearStr, monthStr = traceable_date.year, traceable_date.month
-    else:
-        yearStr, monthStr = listed_date.year, listed_date.month
-    
-    today = datetime.date.today()
-    yearEnd, monthEnd = today.year, today.month
-
-    try:
-        check_time_range(yearStr, monthStr, yearEnd, monthEnd)
-    except Exception as e:
-        print(e.args[0])
-        quit()
-
-    table = {}
-    year, month = yearStr, monthStr
-    dateEnd = datetime.date(yearEnd, monthEnd, 1)
-    
-    while True:
-        date = datetime.date(year, month, 1)
-        dateStr = date.isoformat().replace('-', '')
-        content = crawl_stock(dateStr, stock_idx)
-        table = append_history(content, table)
-        suspendDuration = 5
-        time.sleep(suspendDuration)
-        if month < 12:
-            month += 1
-        else:
-            month = 1
-            year += 1
-        if date >= dateEnd:
-            break
-    return pd.DataFrame(table)
-
-
-def crawl_listed_date(stockNo):
+def crawl_stock_price(stock_idx: int) -> pd.DataFrame:
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
-    payload = {'owncode': str(stockNo), 'stockname': ''}
+    payload = {'owncode': str(stock_idx), 'stockname': ''}
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
+    date_listed = get_listed_date(soup)
+    date_str, date_end = get_time_range(date_listed)
+    return collect_price(stock_idx, date_str, date_end)
 
-    for element in soup.find_all('td'):
+
+def get_listed_date(soup: BeautifulSoup) -> datetime.date:
+    td_all = soup.find_all('td')
+    for element in td_all:
         text = element.get_text()
-        condition1 = len(text.split('/')) == 3
-        condition2 = text.replace('/', '').isdigit()
-        if condition1 and condition2:
+        cond1 = len(text.split('/')) == 3
+        cond2 = text.replace('/', '').isdigit()
+        if cond1 and cond2:
             year, month, day = [int(digit) for digit in text.split('/')]
-            listedDate = datetime.date(year, month, day)
-    return listedDate
+            return datetime.date(year, month, day)
 
 
-def check_time_range(yearStr, monthStr, yearEnd, monthEnd):
-    dateStr = datetime.date(yearStr, monthStr, 1)
-    dateEnd = datetime.date(yearEnd, monthEnd, 1)
-    if dateStr > dateEnd:
-        raise Exception('The start date exceed the end date')
+def get_time_range(date_listed: datetime.date) -> Tuple[datetime.date, datetime.date]:
+    date_traceable = datetime.date(2010, 1, 1)
+    if date_listed < date_traceable:
+        date_str = date_traceable
+    else:
+        date_str = date_listed
+    return date_str, datetime.date.today()
 
 
-def crawl_stock(date, stockNo):
+def collect_price(stock_idx: int, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
+    sleep_time = 5
+    df = pd.DataFrame()
+    date = date_str
+    while True:
+        if date <= date_end:
+            content = crawl_stock(date, stock_idx)
+            df_data = pd.DataFrame(content['data'], columns=content['fields'])
+            df = pd.concat([df, df_data], ignore_index=True)
+            date = get_next_month(date)
+            time.sleep(sleep_time)
+        else:
+            break
+    return pd.DataFrame(df)
+
+
+def crawl_stock(date: datetime.date, stock_idx: int):
+    date_input = str(date).replace('-', '')
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-    payload = {'response': 'json', 'date': str(date), 'stockNo': str(stockNo)}
+    payload = {'response': 'json', 'date': date_input, 'stockNo': str(stock_idx)}
     headers = {'user-agent': AGENT}
-    
-    try:
-        check_date_fmt(date)
-    except Exception as e:
-        print(e.args[0])
-        quit()
-
     response = requests.get(url, params=payload, headers=headers)
-    msg = 'Loading: {}'.format(response.url)
+    date_show = date.strftime('%Y/%m')
+    msg = f'Collecting stock id: {stock_idx:d}, region: {date_show:s}'
     print(msg)
     return eval(response.text)
 
 
-def check_date_fmt(date):
-    if type(date) != str:
-        raise Exception('Date should be input as string')
-    if len(date) != 8:
-        raise Exception('Date should be input as: yyyymmdd')
-    if not date.isdigit():
-        raise Exception('Date should be characters in digits')
-
-
-def append_history(content, table):
-    fields = content['fields']
-    data = content['data']
-    columnNum = len(fields)
-    rowNum = len(data)
-    for col in range(columnNum):
-        title = fields[col]
-        for row in range(rowNum):
-            values = data[row][col]
-            if title in table.keys():
-                table[title].append(values)
-            else:
-                table[title] = [values]
-    return table
+def get_next_month(date: datetime.date):
+    if date.month < 12:
+        return datetime.date(date.year, date.month + 1, 1)
+    else:
+        return datetime.date(date.year + 1, 1, 1)
 
 
 if __name__ == '__main__':
     companies_etfs = crawl_companies_etfs()
-    # stock_price = crawl_stock_price(stock_idx=2330)
-
+    stock_price = crawl_stock_price(stock_idx=2330)
