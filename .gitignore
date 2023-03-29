@@ -1,5 +1,6 @@
-.vscode/
 __pycache__/
+.vscode/
 *.py[cod]
 test/
 data/
+env/
