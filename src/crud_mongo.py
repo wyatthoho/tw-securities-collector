@@ -2,6 +2,7 @@ import configparser
 from typing import Dict, List
 
 from pymongo import MongoClient
+from pymongo.collection import Collection
 from pymongo.database import Database
 
 
@@ -15,7 +16,7 @@ url = config['mongodb']['url']
 client = MongoClient(url)
 
 
-def get_init_db(client: MongoClient, db_name: str):
+def get_init_db(client: MongoClient, db_name: str) -> Database:
     db_names = client.list_database_names()
     if db_name not in db_names:
         return Database(client, db_name)
@@ -23,7 +24,7 @@ def get_init_db(client: MongoClient, db_name: str):
         return client.get_database(db_name)
 
 
-def get_init_collection(db: Database, collection_name: str):
+def get_init_collection(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
         return db.create_collection(collection_name)
