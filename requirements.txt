@@ -1,3 +1,8 @@
+# crawler
 beautifulsoup4
 pandas
 requests
+
+# update_mongo
+pymongo
+
