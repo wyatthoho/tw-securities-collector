@@ -32,14 +32,14 @@ def get_init_collection(db: Database, collection_name: str) -> Collection:
         return db.get_collection(collection_name)
 
 
-def create_docs(db_name: str, collection_name: str, items: List[Dict]):
+def create_docs(db_name: str, collection_name: str, docs: List[Dict]):
     db = get_init_db(client, db_name=db_name)
     collection = get_init_collection(db, collection_name=collection_name)
-    collection.insert_many(items)
+    collection.insert_many(docs)
 
 
 if __name__ == '__main__':
-    items = [
+    docs = [
         {'name': 'Blender', 'price': 340, 'category': 'kitchen appliance'},
         {'name': 'Egg', 'price': 36, 'category': 'food'}
     ]
@@ -47,5 +47,5 @@ if __name__ == '__main__':
     create_docs(
         db_name='test_db',
         collection_name='test_collection',
-        items=items
+        docs=docs
     )
