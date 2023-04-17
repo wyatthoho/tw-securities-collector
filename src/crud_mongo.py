@@ -13,7 +13,7 @@ config.read('.\\src\\config.ini')
 
 # connect to mongodb
 url = config['mongodb']['url']
-client = MongoClient(url)
+client = MongoClient(url, tls=True, tlsAllowInvalidCertificates=True)
 
 
 def get_init_db(client: MongoClient, db_name: str) -> Database:
