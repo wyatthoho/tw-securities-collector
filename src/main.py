@@ -1,10 +1,11 @@
 import pandas
+from typing import Dict, List
 
 import crawler
 import crud_mongo
 
 
-def get_docs(df: pandas.DataFrame):
+def get_docs(df: pandas.DataFrame) -> List[Dict]:
     return [row.to_dict() for idx, row in df.iterrows()]
 
 
