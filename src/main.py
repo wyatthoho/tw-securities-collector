@@ -11,7 +11,7 @@ def get_docs(df: pandas.DataFrame):
 def main():
     companies_etfs = crawler.get_companies_etfs()
     docs = get_docs(companies_etfs)
-    crud_mongo.create_docs(
+    crud_mongo.update_docs(
         db_name='taiwan_stocks',
         collection_name='companies_etfs',
         docs=docs

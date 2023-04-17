@@ -32,10 +32,12 @@ def get_init_collection(db: Database, collection_name: str) -> Collection:
         return db.get_collection(collection_name)
 
 
-def create_docs(db_name: str, collection_name: str, docs: List[Dict]):
+def update_docs(db_name: str, collection_name: str, docs: List[Dict]):
     db = get_init_db(client, db_name=db_name)
     collection = get_init_collection(db, collection_name=collection_name)
-    collection.insert_many(docs)
+    for doc in docs:
+        if not collection.find_one(doc):
+            collection.insert_one(doc)
 
 
 if __name__ == '__main__':
@@ -44,7 +46,7 @@ if __name__ == '__main__':
         {'name': 'Egg', 'price': 36, 'category': 'food'}
     ]
 
-    create_docs(
+    update_docs(
         db_name='test_db',
         collection_name='test_collection',
         docs=docs
