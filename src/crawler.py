@@ -61,7 +61,7 @@ def get_stock_prices(stock_idx: int) -> pd.DataFrame:
     soup = BeautifulSoup(response.text, 'html.parser')
     date_listed = search_listed_date(soup)
     date_str, date_end = define_time_range(date_listed)
-    return iter_time_tange(stock_idx, date_str, date_end)
+    return iter_time_range(stock_idx, date_str, date_end)
 
 
 def search_listed_date(soup: BeautifulSoup) -> datetime.date:
@@ -84,7 +84,7 @@ def define_time_range(date_listed: datetime.date) -> Tuple[datetime.date, dateti
     return date_str, datetime.date.today()
 
 
-def iter_time_tange(stock_idx: int, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
+def iter_time_range(stock_idx: int, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
     sleep_time = 5
     df_main = pd.DataFrame()
     date = date_str
