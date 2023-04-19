@@ -18,6 +18,17 @@ def main():
         docs=docs
     )
 
+    for idx, row in companies_etfs.iterrows():
+        stock_name = row['有價證券名稱']
+        stock_idx = row['有價證券代號']
+        stock_history = crawler.get_stock_prices(stock_idx)
+        docs = get_docs(stock_history)
+        crud_mongo.update_docs(
+            db_name='taiwan_stocks',
+            collection_name=stock_name,
+            docs=docs
+        )
+
 
 if __name__ == '__main__':
     main()
