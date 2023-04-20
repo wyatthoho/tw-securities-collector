@@ -88,15 +88,12 @@ def iter_time_range(stock_idx: int, date_str: datetime.date, date_end: datetime.
     sleep_time = 5
     df_main = pd.DataFrame()
     date = date_str
-    while True:
-        if date <= date_end:
-            content = crawl_stock_month_prices(date, stock_idx)
-            df_data = pd.DataFrame(content['data'], columns=content['fields'])
-            df_main = pd.concat([df_main, df_data], ignore_index=True)
-            date = get_next_month(date)
-            time.sleep(sleep_time)
-        else:
-            break
+    while date <= date_end:
+        content = crawl_stock_month_prices(date, stock_idx)
+        df_data = pd.DataFrame(content['data'], columns=content['fields'])
+        df_main = pd.concat([df_main, df_data], ignore_index=True)
+        date = get_next_month(date)
+        time.sleep(sleep_time)
     return df_main
 
 
