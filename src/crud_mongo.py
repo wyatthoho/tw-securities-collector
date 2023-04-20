@@ -1,4 +1,5 @@
 import configparser
+import datetime
 from typing import Dict, List
 
 from pymongo import MongoClient
@@ -24,17 +25,25 @@ def get_init_db(client: MongoClient, db_name: str) -> Database:
         return client.get_database(db_name)
 
 
-def get_init_collection(db: Database, collection_name: str) -> Collection:
+def get_init_collection(db: Database, collection_name: str, istimeseries: bool) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
-        return db.create_collection(collection_name)
+        if istimeseries:
+            timeseries = {
+                'timeField': 'timestamp',
+                'metaField': 'metadata',
+                'granularity': 'hours'
+            }
+            return db.create_collection(collection_name, timeseries=timeseries)
+        else:
+            return db.create_collection(collection_name)
     else:
         return db.get_collection(collection_name)
 
 
-def update_docs(db_name: str, collection_name: str, docs: List[Dict]):
+def update_docs(db_name: str, collection_name: str, istimeseries: bool, docs: List[Dict]):
     db = get_init_db(client, db_name=db_name)
-    collection = get_init_collection(db, collection_name=collection_name)
+    collection = get_init_collection(db, collection_name, istimeseries)
     for doc in docs:
         if not collection.find_one(doc):
             collection.insert_one(doc)
@@ -42,12 +51,41 @@ def update_docs(db_name: str, collection_name: str, docs: List[Dict]):
 
 if __name__ == '__main__':
     docs = [
-        {'name': 'Blender', 'price': 340, 'category': 'kitchen appliance'},
-        {'name': 'Egg', 'price': 36, 'category': 'food'}
+        {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
+        {'name': 'egg', 'price': 36, 'category': 'food'}
     ]
 
     update_docs(
         db_name='test_db',
-        collection_name='test_collection',
+        collection_name='kitchen_collection',
+        istimeseries=False,
+        docs=docs
+    )
+
+    docs = [
+        {
+            'metadata': {'patient': 'wyatt', 'gender': 'male'},
+            'timestamp': datetime.datetime(2021, 5, 18),
+            'weight': 70.1,
+            'body temperature': 37.4
+        },
+        {
+            'metadata': {'patient': 'wyatt', 'gender': 'male'},
+            'timestamp': datetime.datetime(2021, 5, 19),
+            'weight': 70.6,
+            'body temperature': 37.0
+        },
+        {
+            'metadata': {'patient': 'wyatt', 'gender': 'male'},
+            'timestamp': datetime.datetime(2021, 5, 20),
+            'weight': 70.2,
+            'body temperature': 36.8
+        },
+    ]
+
+    update_docs(
+        db_name='test_db',
+        collection_name='patient_condition',
+        istimeseries=True,
         docs=docs
     )
