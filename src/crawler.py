@@ -50,12 +50,12 @@ def append_stock_data(df_main: pd.DataFrame, data: dict) -> pd.DataFrame:
         return df_main
 
 
-def get_stock_prices(stock_idx: int) -> pd.DataFrame:
+def get_stock_prices(stock_idx: str) -> pd.DataFrame:
     '''
     Collect the prices for the specific stock index for all time.
     '''
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
-    payload = {'owncode': str(stock_idx), 'stockname': ''}
+    payload = {'owncode': stock_idx, 'stockname': ''}
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -84,7 +84,7 @@ def define_time_range(date_listed: datetime.date) -> Tuple[datetime.date, dateti
     return date_str, datetime.date.today()
 
 
-def iter_time_range(stock_idx: int, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
+def iter_time_range(stock_idx: str, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
     sleep_time = 5
     df_main = pd.DataFrame()
     date = date_str
@@ -97,13 +97,13 @@ def iter_time_range(stock_idx: int, date_str: datetime.date, date_end: datetime.
     return df_main
 
 
-def crawl_stock_month_prices(date: datetime.date, stock_idx: int) -> dict:
+def crawl_stock_month_prices(date: datetime.date, stock_idx: str) -> dict:
     date_input = str(date).replace('-', '')
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     payload = {
         'response': 'json',
         'date': date_input,
-        'stockNo': str(stock_idx)
+        'stockNo': stock_idx
     }
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
@@ -122,4 +122,4 @@ def get_next_month(date: datetime.date) -> datetime.date:
 
 if __name__ == '__main__':
     companies_etfs = get_companies_etfs()
-    stock_prices = get_stock_prices(stock_idx=2330)
+    stock_prices = get_stock_prices(stock_idx='2330')
