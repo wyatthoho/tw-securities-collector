@@ -36,7 +36,7 @@ def rocdate_to_utc(rocdate: str) -> datetime.datetime:
 
 
 def main():
-    companies_etfs = crawler.get_companies_etfs()
+    companies_etfs = crawler.get_security_table()
     docs = dataframe_to_docs(companies_etfs)
     crud_mongo.update_docs(
         db_name='taiwan_stocks',
@@ -48,7 +48,7 @@ def main():
     for idx, row in companies_etfs.iterrows():
         stock_name = row['有價證券名稱']
         stock_idx = row['有價證券代號']
-        stock_history = crawler.get_stock_prices(stock_idx)
+        stock_history = crawler.get_security_prices(stock_idx)
         docs = dataframe_to_timeseries(stock_history)
         crud_mongo.update_docs(
             db_name='taiwan_stocks',

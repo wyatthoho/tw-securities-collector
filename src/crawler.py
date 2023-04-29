@@ -4,14 +4,14 @@ from typing import Tuple
 
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, ResultSet
 
 AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 
 
-def get_companies_etfs() -> pd.DataFrame:
+def get_security_table() -> pd.DataFrame:
     '''
-    Collect the List of Taiwan Stock Exchange Listed Companies and ETFs.
+    Collect the table of securities from Taiwan Stock Exchange.
     '''
     # Get the soup
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
@@ -19,38 +19,38 @@ def get_companies_etfs() -> pd.DataFrame:
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
-    # Initialize data frame
+    # Analyze the soup
     table = soup.find('table', class_='h4')
     first_row = table.find('tr')
-    cols_all = first_row.text.split('\n')
-    cols_tgt = [text for text in cols_all if text]
-    df = pd.DataFrame(columns=cols_tgt)
+    columns = first_row.text.split('\n')
+    other_rows = first_row.find_next_siblings('tr')
+    return collect_securities(columns, other_rows)
 
-    # Collect row data
-    rows = first_row.find_next_siblings('tr')
+
+def collect_securities(columns: list, rows: ResultSet):
+    df = pd.DataFrame()
     for row in rows:
-        data_all = row.text.split('\n')
-        data_tgt = {
-            name: cont for name, cont in zip(cols_all, data_all) if name
+        data_dirty = row.text.split('\n')
+        data_cleaned = {
+            column: content
+            for column, content in zip(columns, data_dirty)
+            if column
         }
-        df = append_stock_data(df, data_tgt)
+        if security_filter(data_cleaned):
+            df_data = pd.DataFrame([data_cleaned])
+            df = pd.concat([df, df_data], ignore_index=True)
     return df
 
 
-def append_stock_data(df_main: pd.DataFrame, data: dict) -> pd.DataFrame:
+def security_filter(data: dict) -> bool:
     cond1 = not data['有價證券代號'][-1].isalpha()
     cond2 = not data['有價證券代號'][0].isalpha()
     cond3 = data['市場別'] not in ['上櫃', '期貨及選擇權', '興櫃一般板', '公開發行', '創櫃版']
     cond4 = data['有價證券別'] in ['ETF', '股票']
-    conds = [cond1, cond2, cond3, cond4]
-    if all(conds):
-        df_data = pd.DataFrame([data])
-        return pd.concat([df_main, df_data], ignore_index=True)
-    else:
-        return df_main
+    return all([cond1, cond2, cond3, cond4])
 
 
-def get_stock_prices(stock_idx: str) -> pd.DataFrame:
+def get_security_prices(stock_idx: str) -> pd.DataFrame:
     '''
     Collect the prices for the specific stock index for all time.
     '''
@@ -89,7 +89,7 @@ def iter_time_range(stock_idx: str, date_str: datetime.date, date_end: datetime.
     df_main = pd.DataFrame()
     date = date_str
     while date <= date_end:
-        content = crawl_stock_month_prices(date, stock_idx)
+        content = crawl_month_prices(date, stock_idx)
         df_data = pd.DataFrame(content['data'], columns=content['fields'])
         df_main = pd.concat([df_main, df_data], ignore_index=True)
         date = get_next_month(date)
@@ -97,7 +97,7 @@ def iter_time_range(stock_idx: str, date_str: datetime.date, date_end: datetime.
     return df_main
 
 
-def crawl_stock_month_prices(date: datetime.date, stock_idx: str) -> dict:
+def crawl_month_prices(date: datetime.date, stock_idx: str) -> dict:
     date_input = str(date).replace('-', '')
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     payload = {
@@ -108,7 +108,7 @@ def crawl_stock_month_prices(date: datetime.date, stock_idx: str) -> dict:
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     date_show = date.strftime('%Y/%m')
-    msg = f'Collecting {stock_idx} stock prices in {date_show}..'
+    msg = f'Collecting the prices of {stock_idx} in {date_show}..'
     print(msg)
     return eval(response.text)
 
@@ -121,5 +121,5 @@ def get_next_month(date: datetime.date) -> datetime.date:
 
 
 if __name__ == '__main__':
-    companies_etfs = get_companies_etfs()
-    stock_prices = get_stock_prices(stock_idx='2330')
+    securities = get_security_table()
+    security_prices = get_security_prices(stock_idx='2330')
