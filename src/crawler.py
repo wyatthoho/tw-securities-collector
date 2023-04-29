@@ -50,18 +50,18 @@ def security_filter(data: dict) -> bool:
     return all([cond1, cond2, cond3, cond4])
 
 
-def get_security_prices(stock_idx: str) -> pd.DataFrame:
+def get_security_prices(security_code: str) -> pd.DataFrame:
     '''
     Collect the prices for the specific stock index for all time.
     '''
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
-    payload = {'owncode': stock_idx, 'stockname': ''}
+    payload = {'owncode': security_code, 'stockname': ''}
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     date_listed = search_listed_date(soup)
     date_str, date_end = define_time_range(date_listed)
-    return iter_time_range(stock_idx, date_str, date_end)
+    return iter_time_range(security_code, date_str, date_end)
 
 
 def search_listed_date(soup: BeautifulSoup) -> datetime.date:
@@ -84,12 +84,12 @@ def define_time_range(date_listed: datetime.date) -> Tuple[datetime.date, dateti
     return date_str, datetime.date.today()
 
 
-def iter_time_range(stock_idx: str, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
+def iter_time_range(security_code: str, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
     sleep_time = 5
     df_main = pd.DataFrame()
     date = date_str
     while date <= date_end:
-        content = crawl_month_prices(date, stock_idx)
+        content = crawl_month_prices(date, security_code)
         df_data = pd.DataFrame(content['data'], columns=content['fields'])
         df_main = pd.concat([df_main, df_data], ignore_index=True)
         date = get_next_month(date)
@@ -97,18 +97,18 @@ def iter_time_range(stock_idx: str, date_str: datetime.date, date_end: datetime.
     return df_main
 
 
-def crawl_month_prices(date: datetime.date, stock_idx: str) -> dict:
+def crawl_month_prices(date: datetime.date, security_code: str) -> dict:
     date_input = str(date).replace('-', '')
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     payload = {
         'response': 'json',
         'date': date_input,
-        'stockNo': stock_idx
+        'stockNo': security_code
     }
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
     date_show = date.strftime('%Y/%m')
-    msg = f'Collecting the prices of {stock_idx} in {date_show}..'
+    msg = f'Collecting the prices of {security_code} in {date_show}..'
     print(msg)
     return eval(response.text)
 
@@ -122,4 +122,4 @@ def get_next_month(date: datetime.date) -> datetime.date:
 
 if __name__ == '__main__':
     securities = get_security_table()
-    security_prices = get_security_prices(stock_idx='2330')
+    security_prices = get_security_prices(security_code='2330')
