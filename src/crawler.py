@@ -10,6 +10,7 @@ AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.
 DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
 
+
 def get_security_table() -> pd.DataFrame:
     '''
     Collect the table of securities from Taiwan Stock Exchange.
@@ -89,7 +90,9 @@ def check_time_range(date_listed: datetime.date, date_str: datetime.date, date_e
     if date_str > date_end:
         raise Exception('The start date is later than the end date.')
     elif date_str < date_earliest:
-        raise Exception(f'The start date can not be earlier than {date_earliest}.')
+        raise Exception(
+            f'The start date can not be earlier than {date_earliest}.'
+        )
     elif date_end > DATE_TODAY:
         raise Exception(f'The end date can not be later than {DATE_TODAY}.')
 
