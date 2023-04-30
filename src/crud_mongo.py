@@ -17,7 +17,7 @@ url = config['mongodb']['url']
 client = MongoClient(url, tls=True, tlsAllowInvalidCertificates=True)
 
 
-def get_init_db(client: MongoClient, db_name: str) -> Database:
+def get_database(client: MongoClient, db_name: str) -> Database:
     db_names = client.list_database_names()
     if db_name not in db_names:
         return Database(client, db_name)
@@ -25,7 +25,7 @@ def get_init_db(client: MongoClient, db_name: str) -> Database:
         return client.get_database(db_name)
 
 
-def get_init_collection(db: Database, collection_name: str, istimeseries: bool) -> Collection:
+def get_collection(db: Database, collection_name: str, istimeseries: bool) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
         if istimeseries:
@@ -42,15 +42,15 @@ def get_init_collection(db: Database, collection_name: str, istimeseries: bool) 
 
 
 def update_docs(db_name: str, collection_name: str, istimeseries: bool, docs: List[Dict]):
-    db = get_init_db(client, db_name=db_name)
-    collection = get_init_collection(db, collection_name, istimeseries)
+    db = get_database(client, db_name=db_name)
+    collection = get_collection(db, collection_name, istimeseries)
     for doc in docs:
         if not collection.find_one(doc):
             collection.insert_one(doc)
 
 
 if __name__ == '__main__':
-    docs = [
+    general_docs = [
         {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
         {'name': 'egg', 'price': 36, 'category': 'food'}
     ]
@@ -59,10 +59,10 @@ if __name__ == '__main__':
         db_name='test_db',
         collection_name='kitchen_collection',
         istimeseries=False,
-        docs=docs
+        docs=general_docs
     )
 
-    docs = [
+    timeseries_docs = [
         {
             'metadata': {'patient': 'wyatt', 'gender': 'male'},
             'timestamp': datetime.datetime(2021, 5, 18),
@@ -87,5 +87,5 @@ if __name__ == '__main__':
         db_name='test_db',
         collection_name='patient_condition',
         istimeseries=True,
-        docs=docs
+        docs=timeseries_docs
     )
