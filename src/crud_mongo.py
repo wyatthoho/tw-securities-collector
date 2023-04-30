@@ -6,15 +6,17 @@ from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-
-# read config.ini
-config = configparser.ConfigParser()
-config.read('.\\src\\config.ini')
+CONFIG_FILE = '.\\src\\config.ini'
 
 
-# connect to mongodb
-url = config['mongodb']['url']
-client = MongoClient(url, tls=True, tlsAllowInvalidCertificates=True)
+def read_config() -> Dict[str, str]:
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    return config['mongodb']['url']
+
+
+def connect_mongodb(url: str) -> MongoClient:
+    return MongoClient(url, tls=True, tlsAllowInvalidCertificates=True)
 
 
 def get_database(client: MongoClient, db_name: str) -> Database:
@@ -41,12 +43,14 @@ def get_collection(db: Database, collection_name: str, istimeseries: bool) -> Co
         return db.get_collection(collection_name)
 
 
-def update_docs(db_name: str, collection_name: str, istimeseries: bool, docs: List[Dict]):
-    db = get_database(client, db_name=db_name)
-    collection = get_collection(db, collection_name, istimeseries)
-    for doc in docs:
-        if not collection.find_one(doc):
-            collection.insert_one(doc)
+def update_documents(db_name: str, collection_name: str, istimeseries: bool, docs: List[Dict]):
+    url = read_config()
+    with connect_mongodb(url) as client:
+        db = get_database(client, db_name)
+        collection = get_collection(db, collection_name, istimeseries)
+        for doc in docs:
+            if not collection.find_one(doc):
+                collection.insert_one(doc)
 
 
 if __name__ == '__main__':
@@ -55,7 +59,7 @@ if __name__ == '__main__':
         {'name': 'egg', 'price': 36, 'category': 'food'}
     ]
 
-    update_docs(
+    update_documents(
         db_name='test_db',
         collection_name='kitchen_collection',
         istimeseries=False,
@@ -83,7 +87,7 @@ if __name__ == '__main__':
         },
     ]
 
-    update_docs(
+    update_documents(
         db_name='test_db',
         collection_name='patient_condition',
         istimeseries=True,

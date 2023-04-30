@@ -39,7 +39,7 @@ def main():
     DB_NAME = 'taiwan_securities'
     securities = crawler.get_security_table()
     docs = dataframe_to_docs(securities)
-    crud_mongo.update_docs(
+    crud_mongo.update_documents(
         db_name=DB_NAME,
         collection_name='security_info',
         istimeseries=False,
@@ -51,7 +51,7 @@ def main():
         security_code = row['有價證券代號']
         security_prices = crawler.get_security_prices(security_code)
         docs = dataframe_to_timeseries(security_prices)
-        crud_mongo.update_docs(
+        crud_mongo.update_documents(
             db_name=DB_NAME,
             collection_name=security_name,
             istimeseries=True,
