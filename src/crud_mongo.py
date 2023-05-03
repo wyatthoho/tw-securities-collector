@@ -27,27 +27,42 @@ def get_database(client: MongoClient, db_name: str) -> Database:
         return client.get_database(db_name)
 
 
-def get_collection(db: Database, collection_name: str, istimeseries: bool) -> Collection:
+def get_general_collection(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
-        if istimeseries:
-            timeseries = {
-                'timeField': 'timestamp',
-                'metaField': 'metadata',
-                'granularity': 'hours'
-            }
-            return db.create_collection(collection_name, timeseries=timeseries)
-        else:
-            return db.create_collection(collection_name)
+        return db.create_collection(collection_name)
     else:
         return db.get_collection(collection_name)
 
 
-def update_documents(db_name: str, collection_name: str, istimeseries: bool, docs: List[Dict]):
+def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
+    collection_names = db.list_collection_names()
+    if collection_name not in collection_names:
+        timeseries = {
+            'timeField': 'timestamp',
+            'metaField': 'metadata',
+            'granularity': 'hours'
+        }
+        return db.create_collection(collection_name, timeseries=timeseries)
+    else:
+        return db.get_collection(collection_name)
+
+
+def update_general_documents(db_name: str, collection_name: str, docs: List[Dict]):
     url = read_config()
     with connect_mongodb(url) as client:
         db = get_database(client, db_name)
-        collection = get_collection(db, collection_name, istimeseries)
+        collection = get_general_collection(db, collection_name)
+        for doc in docs:
+            if not collection.find_one(doc):
+                collection.insert_one(doc)
+
+
+def update_timeseries_documents(db_name: str, collection_name: str, docs: List[Dict]):
+    url = read_config()
+    with connect_mongodb(url) as client:
+        db = get_database(client, db_name)
+        collection = get_timeseries_collection(db, collection_name)
         for doc in docs:
             if not collection.find_one(doc):
                 collection.insert_one(doc)
@@ -59,10 +74,9 @@ if __name__ == '__main__':
         {'name': 'egg', 'price': 36, 'category': 'food'}
     ]
 
-    update_documents(
+    update_general_documents(
         db_name='test_db',
         collection_name='kitchen_collection',
-        istimeseries=False,
         docs=general_docs
     )
 
@@ -87,9 +101,8 @@ if __name__ == '__main__':
         },
     ]
 
-    update_documents(
+    update_timeseries_documents(
         db_name='test_db',
         collection_name='patient_condition',
-        istimeseries=True,
         docs=timeseries_docs
     )
