@@ -1,5 +1,6 @@
 import configparser
 import datetime
+import functools
 from typing import Dict, List
 
 from pymongo import MongoClient
@@ -29,16 +30,19 @@ def insert_docs(collection, docs: List[Dict]):
             collection.insert_one(doc)
 
 
-def connect_mongodb(func):
-    def wrapper(db_name: str, collection_name: str, docs: List[Dict]):
-        with MongoClient(read_config(), tls=True, tlsAllowInvalidCertificates=True) as client:
-            db = get_database(client, db_name)
-            collection = func(db, collection_name)
-            insert_docs(collection, docs)
-    return wrapper
+def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invalid_certificates: bool = True):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(db_name: str, collection_name: str, docs: List[Dict]):
+            with MongoClient(url, tls=tls, tlsAllowInvalidCertificates=tls_allow_invalid_certificates) as client:
+                db = get_database(client, db_name)
+                collection = func(db, collection_name)
+                insert_docs(collection, docs)
+        return wrapper
+    return decorator
 
 
-@connect_mongodb
+@connect_mongodb()
 def update_general_documents(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
@@ -47,7 +51,7 @@ def update_general_documents(db: Database, collection_name: str) -> Collection:
         return db.get_collection(collection_name)
 
 
-@connect_mongodb
+@connect_mongodb()
 def update_timeseries_documents(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
