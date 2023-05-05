@@ -15,10 +15,6 @@ def read_config() -> Dict[str, str]:
     return config['mongodb']['url']
 
 
-def connect_mongodb(url: str) -> MongoClient:
-    return MongoClient(url, tls=True, tlsAllowInvalidCertificates=True)
-
-
 def get_database(client: MongoClient, db_name: str) -> Database:
     db_names = client.list_database_names()
     if db_name not in db_names:
@@ -27,7 +23,23 @@ def get_database(client: MongoClient, db_name: str) -> Database:
         return client.get_database(db_name)
 
 
-def get_general_collection(db: Database, collection_name: str) -> Collection:
+def insert_docs(collection, docs: List[Dict]):
+    for doc in docs:
+        if not collection.find_one(doc):
+            collection.insert_one(doc)
+
+
+def connect_mongodb(func):
+    def wrapper(db_name: str, collection_name: str, docs: List[Dict]):
+        with MongoClient(read_config(), tls=True, tlsAllowInvalidCertificates=True) as client:
+            db = get_database(client, db_name)
+            collection = func(db, collection_name)
+            insert_docs(collection, docs)
+    return wrapper
+
+
+@connect_mongodb
+def update_general_documents(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
         return db.create_collection(collection_name)
@@ -35,7 +47,8 @@ def get_general_collection(db: Database, collection_name: str) -> Collection:
         return db.get_collection(collection_name)
 
 
-def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
+@connect_mongodb
+def update_timeseries_documents(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
         timeseries = {
@@ -46,26 +59,6 @@ def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
         return db.create_collection(collection_name, timeseries=timeseries)
     else:
         return db.get_collection(collection_name)
-
-
-def update_general_documents(db_name: str, collection_name: str, docs: List[Dict]):
-    url = read_config()
-    with connect_mongodb(url) as client:
-        db = get_database(client, db_name)
-        collection = get_general_collection(db, collection_name)
-        for doc in docs:
-            if not collection.find_one(doc):
-                collection.insert_one(doc)
-
-
-def update_timeseries_documents(db_name: str, collection_name: str, docs: List[Dict]):
-    url = read_config()
-    with connect_mongodb(url) as client:
-        db = get_database(client, db_name)
-        collection = get_timeseries_collection(db, collection_name)
-        for doc in docs:
-            if not collection.find_one(doc):
-                collection.insert_one(doc)
 
 
 if __name__ == '__main__':
