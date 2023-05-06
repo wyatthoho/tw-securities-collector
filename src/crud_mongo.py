@@ -17,7 +17,7 @@ class OriginalFunc(Protocol):
 
 
 class DecoratedFunc(Protocol):
-    def __call__(self, db_name: str, collection_name: str, docs: List[Dict]) -> None:
+    def __call__(self, db_name: str, collection_name: str) -> None:
         ...
 
 
@@ -35,7 +35,15 @@ def get_database(client: MongoClient, db_name: str) -> Database:
         return client.get_database(db_name)
 
 
-def insert_docs(collection, docs: List[Dict]):
+def close_client(func):
+    def wrapper(collection: Collection, docs: List[Dict]):
+        func(collection, docs)
+        collection.database.client.close()
+    return wrapper
+
+
+@close_client
+def insert_docs(collection: Collection, docs: List[Dict]):
     for doc in docs:
         if not collection.find_one(doc):
             collection.insert_one(doc)
@@ -44,17 +52,20 @@ def insert_docs(collection, docs: List[Dict]):
 def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invalid_certificates: bool = True):
     def decorator(func: OriginalFunc) -> DecoratedFunc:
         @functools.wraps(func)
-        def wrapper(db_name: str, collection_name: str, docs: List[Dict]):
-            with MongoClient(url, tls=tls, tlsAllowInvalidCertificates=tls_allow_invalid_certificates) as client:
-                db = get_database(client, db_name)
-                collection = func(db, collection_name)
-                insert_docs(collection, docs)
+        def wrapper(db_name: str, collection_name: str):
+            client = MongoClient(
+                url,
+                tls=tls,
+                tlsAllowInvalidCertificates=tls_allow_invalid_certificates
+            )
+            db = get_database(client, db_name)
+            return func(db, collection_name)
         return wrapper
     return decorator
 
 
 @connect_mongodb()
-def update_general_documents(db: Database, collection_name: str) -> Collection:
+def get_general_collection(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
         return db.create_collection(collection_name)
@@ -63,7 +74,7 @@ def update_general_documents(db: Database, collection_name: str) -> Collection:
 
 
 @connect_mongodb()
-def update_timeseries_documents(db: Database, collection_name: str) -> Collection:
+def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
         timeseries = {
@@ -76,13 +87,29 @@ def update_timeseries_documents(db: Database, collection_name: str) -> Collectio
         return db.get_collection(collection_name)
 
 
+def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Dict]):
+    collection = get_general_collection(
+        db_name=db_name,
+        collection_name=collection_name,
+    )
+    insert_docs(collection, docs)
+
+
+def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List[Dict]):
+    collection = get_timeseries_collection(
+        db_name=db_name,
+        collection_name=collection_name,
+    )
+    insert_docs(collection, docs)
+
+
 if __name__ == '__main__':
     general_docs = [
         {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
         {'name': 'egg', 'price': 36, 'category': 'food'}
     ]
 
-    update_general_documents(
+    connect_and_insert_general(
         db_name='test_db',
         collection_name='kitchen_collection',
         docs=general_docs
@@ -109,7 +136,7 @@ if __name__ == '__main__':
         },
     ]
 
-    update_timeseries_documents(
+    connect_and_insert_timeseries(
         db_name='test_db',
         collection_name='patient_condition',
         docs=timeseries_docs
