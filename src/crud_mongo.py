@@ -1,13 +1,24 @@
 import configparser
 import datetime
 import functools
-from typing import Dict, List
+from typing import Dict, List, Protocol
 
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
+
 CONFIG_FILE = '.\\src\\config.ini'
+
+
+class OriginalFunc(Protocol):
+    def __call__(self, db: Database, collection_name: str) -> Collection:
+        ...
+
+
+class DecoratedFunc(Protocol):
+    def __call__(self, db_name: str, collection_name: str, docs: List[Dict]) -> None:
+        ...
 
 
 def read_config() -> Dict[str, str]:
@@ -31,7 +42,7 @@ def insert_docs(collection, docs: List[Dict]):
 
 
 def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invalid_certificates: bool = True):
-    def decorator(func):
+    def decorator(func: OriginalFunc) -> DecoratedFunc:
         @functools.wraps(func)
         def wrapper(db_name: str, collection_name: str, docs: List[Dict]):
             with MongoClient(url, tls=tls, tlsAllowInvalidCertificates=tls_allow_invalid_certificates) as client:
