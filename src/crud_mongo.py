@@ -3,7 +3,7 @@ import datetime
 import functools
 from typing import Dict, List, Protocol
 
-from pymongo import MongoClient
+from pymongo import MongoClient, DESCENDING
 from pymongo.collection import Collection
 from pymongo.database import Database
 
@@ -45,7 +45,7 @@ def close_client(func):
 @close_client
 def insert_docs(collection: Collection, docs: List[Dict]):
     for doc in docs:
-        if not collection.find_one(doc):
+        if not collection.find_one(doc):  # ERROR! (duplicated insertion for timeseries)
             collection.insert_one(doc)
 
 
@@ -103,6 +103,15 @@ def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List
     insert_docs(collection, docs)
 
 
+def get_latest_timestamp(db_name: str, collection_name: str):
+    collection = get_timeseries_collection(
+        db_name=db_name,
+        collection_name=collection_name,
+    )
+    latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
+    return latest_doc['timestamp']
+
+
 if __name__ == '__main__':
     general_docs = [
         {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
@@ -140,4 +149,9 @@ if __name__ == '__main__':
         db_name='test_db',
         collection_name='patient_condition',
         docs=timeseries_docs
+    )
+
+    latest_timestamp = get_latest_timestamp(
+        db_name='test_db',
+        collection_name='patient_condition',
     )
