@@ -44,9 +44,32 @@ def close_client(func):
 
 @close_client
 def insert_docs(collection: Collection, docs: List[Dict]):
-    for doc in docs:
-        if not collection.find_one(doc):  # ERROR! (duplicated insertion for timeseries)
+    is_timeseries = 'timeseries' in collection.options()
+    queries = generate_queries(docs, is_timeseries)
+    for query, doc in zip(queries, docs):
+        if not collection.find_one(query):
             collection.insert_one(doc)
+
+
+def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
+    '''
+    If it is a collection of time series, each document has a subdocument
+    called `metadata`. Using the `find_one` method to query any document
+    might fail because the order of keys in the subdocument is important.
+    Therefore, an alternative approach is used where each field is matched
+    individually to query the subdocument.
+    '''
+    if is_timeseries:
+        queries = []
+        for doc in docs:
+            query = doc.copy()
+            for key, val in doc['metadata'].items():
+                query[f'metadata.{key}'] = val
+            del query['metadata']
+            queries.append(query)
+    else:
+        queries = docs
+    return queries
 
 
 def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invalid_certificates: bool = True):
