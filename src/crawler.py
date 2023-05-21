@@ -7,6 +7,8 @@ import requests
 from bs4 import BeautifulSoup, ResultSet
 
 AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
+DATE_TRACEABLE = datetime.date(2010, 1, 1)
+DATE_TODAY = datetime.date.today()
 
 
 def get_security_table() -> pd.DataFrame:
@@ -50,7 +52,10 @@ def security_filter(data: dict) -> bool:
     return all([cond1, cond2, cond3, cond4])
 
 
-def get_security_prices(security_code: str) -> pd.DataFrame:
+def get_security_prices(
+        security_code: str,
+        date_str: datetime.date = DATE_TRACEABLE,
+        date_end: datetime.date = DATE_TODAY) -> pd.DataFrame:
     '''
     Collect the prices for the specific stock index for all time.
     '''
@@ -60,7 +65,12 @@ def get_security_prices(security_code: str) -> pd.DataFrame:
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     date_listed = search_listed_date(soup)
-    date_str, date_end = define_time_range(date_listed)
+    try:
+        check_time_range(date_listed, date_str, date_end)
+    except Exception as e:
+        print(e)
+        quit()
+    date_str, date_end = correct_time_range(date_listed, date_str, date_end)
     return iter_time_range(security_code, date_str, date_end)
 
 
@@ -75,13 +85,22 @@ def search_listed_date(soup: BeautifulSoup) -> datetime.date:
             return datetime.date(year, month, day)
 
 
-def define_time_range(date_listed: datetime.date) -> Tuple[datetime.date, datetime.date]:
-    date_traceable = datetime.date(2010, 1, 1)
-    if date_listed < date_traceable:
-        date_str = date_traceable
-    else:
-        date_str = date_listed
-    return date_str, datetime.date.today()
+def check_time_range(date_listed: datetime.date, date_str: datetime.date, date_end: datetime.date):
+    date_earliest = max(DATE_TRACEABLE, date_listed)
+    if date_str > date_end:
+        raise Exception('The start date is later than the end date.')
+    elif date_str < date_earliest:
+        raise Exception(
+            f'The start date can not be earlier than {date_earliest}.'
+        )
+    elif date_end > DATE_TODAY:
+        raise Exception(f'The end date can not be later than {DATE_TODAY}.')
+
+
+def correct_time_range(date_listed: datetime.date, date_str: datetime.date, date_end: datetime.date) -> Tuple[datetime.date, datetime.date]:
+    date_str = max(DATE_TRACEABLE, date_listed, date_str)
+    date_end = min(DATE_TODAY, date_end)
+    return date_str, date_end
 
 
 def iter_time_range(security_code: str, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
@@ -122,4 +141,8 @@ def get_next_month(date: datetime.date) -> datetime.date:
 
 if __name__ == '__main__':
     securities = get_security_table()
-    security_prices = get_security_prices(security_code='2330')
+    security_prices = get_security_prices(
+        security_code='2330',
+        date_str=datetime.date(2022, 11, 1),
+        date_end=datetime.date(2023, 4, 1)
+    )
