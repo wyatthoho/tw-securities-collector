@@ -11,6 +11,12 @@ from pymongo.database import Database
 CONFIG_FILE = '.\\src\\config.ini'
 
 
+def read_config() -> Dict[str, str]:
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    return config['mongodb']['url']
+
+
 class OriginalFunc(Protocol):
     def __call__(self, db: Database, collection_name: str) -> Collection:
         ...
@@ -21,55 +27,12 @@ class DecoratedFunc(Protocol):
         ...
 
 
-def read_config() -> Dict[str, str]:
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    return config['mongodb']['url']
-
-
 def get_database(client: MongoClient, db_name: str) -> Database:
     db_names = client.list_database_names()
     if db_name not in db_names:
         return Database(client, db_name)
     else:
         return client.get_database(db_name)
-
-
-def close_client(func):
-    def wrapper(collection: Collection, docs: List[Dict]):
-        func(collection, docs)
-        collection.database.client.close()
-    return wrapper
-
-
-@close_client
-def insert_docs(collection: Collection, docs: List[Dict]):
-    is_timeseries = 'timeseries' in collection.options()
-    queries = generate_queries(docs, is_timeseries)
-    for query, doc in zip(queries, docs):
-        if not collection.find_one(query):
-            collection.insert_one(doc)
-
-
-def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
-    '''
-    If it is a collection of time series, each document has a subdocument
-    called `metadata`. Using the `find_one` method to query any document
-    might fail because the order of keys in the subdocument is important.
-    Therefore, an alternative approach is used where each field is matched
-    individually to query the subdocument.
-    '''
-    if is_timeseries:
-        queries = []
-        for doc in docs:
-            query = doc.copy()
-            for key, val in doc['metadata'].items():
-                query[f'metadata.{key}'] = val
-            del query['metadata']
-            queries.append(query)
-    else:
-        queries = docs
-    return queries
 
 
 def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invalid_certificates: bool = True):
@@ -96,6 +59,51 @@ def get_general_collection(db: Database, collection_name: str) -> Collection:
         return db.get_collection(collection_name)
 
 
+def close_client(func):
+    def wrapper(collection: Collection, docs: List[Dict]):
+        func(collection, docs)
+        collection.database.client.close()
+    return wrapper
+
+
+def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
+    '''
+    If it is a collection of time series, each document has a subdocument
+    called `metadata`. Using the `find_one` method to query any document
+    might fail because the order of keys in the subdocument is important.
+    Therefore, an alternative approach is used where each field is matched
+    individually to query the subdocument.
+    '''
+    if is_timeseries:
+        queries = []
+        for doc in docs:
+            query = doc.copy()
+            for key, val in doc['metadata'].items():
+                query[f'metadata.{key}'] = val
+            del query['metadata']
+            queries.append(query)
+    else:
+        queries = docs
+    return queries
+
+
+@close_client
+def insert_docs(collection: Collection, docs: List[Dict]):
+    is_timeseries = 'timeseries' in collection.options()
+    queries = generate_queries(docs, is_timeseries)
+    for query, doc in zip(queries, docs):
+        if not collection.find_one(query):
+            collection.insert_one(doc)
+
+
+def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Dict]):
+    collection = get_general_collection(
+        db_name=db_name,
+        collection_name=collection_name,
+    )
+    insert_docs(collection, docs)
+
+
 @connect_mongodb()
 def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
@@ -108,14 +116,6 @@ def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
         return db.create_collection(collection_name, timeseries=timeseries)
     else:
         return db.get_collection(collection_name)
-
-
-def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Dict]):
-    collection = get_general_collection(
-        db_name=db_name,
-        collection_name=collection_name,
-    )
-    insert_docs(collection, docs)
 
 
 def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List[Dict]):

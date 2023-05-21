@@ -11,22 +11,35 @@ DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
 
 
-def get_security_table() -> pd.DataFrame:
-    '''
-    Collect the table of securities from Taiwan Stock Exchange.
-    '''
-    # Get the soup
-    url = "https://isin.twse.com.tw/isin/single_main.jsp?"
+def crawl_month_prices(date: datetime.date, security_code: str) -> dict:
+    date_input = str(date).replace('-', '')
+    url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+    payload = {
+        'response': 'json',
+        'date': date_input,
+        'stockNo': security_code
+    }
     headers = {'user-agent': AGENT}
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    response = requests.get(url, params=payload, headers=headers)
+    date_show = date.strftime('%Y/%m')
+    msg = f'Collecting the prices of {security_code} in {date_show}..'
+    print(msg)
+    return eval(response.text)
 
-    # Analyze the soup
-    table = soup.find('table', class_='h4')
-    first_row = table.find('tr')
-    columns = first_row.text.split('\n')
-    other_rows = first_row.find_next_siblings('tr')
-    return collect_securities(columns, other_rows)
+
+def get_next_month(date: datetime.date) -> datetime.date:
+    if date.month < 12:
+        return datetime.date(date.year, date.month+1, 1)
+    else:
+        return datetime.date(date.year+1, 1, 1)
+
+
+def security_filter(data: dict) -> bool:
+    cond1 = not data['有價證券代號'][-1].isalpha()
+    cond2 = not data['有價證券代號'][0].isalpha()
+    cond3 = data['市場別'] not in ['上櫃', '期貨及選擇權', '興櫃一般板', '公開發行', '創櫃版']
+    cond4 = data['有價證券別'] in ['ETF', '股票']
+    return all([cond1, cond2, cond3, cond4])
 
 
 def collect_securities(columns: list, rows: ResultSet):
@@ -44,34 +57,22 @@ def collect_securities(columns: list, rows: ResultSet):
     return df
 
 
-def security_filter(data: dict) -> bool:
-    cond1 = not data['有價證券代號'][-1].isalpha()
-    cond2 = not data['有價證券代號'][0].isalpha()
-    cond3 = data['市場別'] not in ['上櫃', '期貨及選擇權', '興櫃一般板', '公開發行', '創櫃版']
-    cond4 = data['有價證券別'] in ['ETF', '股票']
-    return all([cond1, cond2, cond3, cond4])
-
-
-def get_security_prices(
-        security_code: str,
-        date_str: datetime.date = DATE_TRACEABLE,
-        date_end: datetime.date = DATE_TODAY) -> pd.DataFrame:
+def get_security_table() -> pd.DataFrame:
     '''
-    Collect the prices for the specific stock index for all time.
+    Collect the table of securities from Taiwan Stock Exchange.
     '''
+    # Get the soup
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
-    payload = {'owncode': security_code, 'stockname': ''}
     headers = {'user-agent': AGENT}
-    response = requests.get(url, params=payload, headers=headers)
+    response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
-    date_listed = search_listed_date(soup)
-    try:
-        check_time_range(date_listed, date_str, date_end)
-    except Exception as e:
-        print(e)
-        quit()
-    date_str, date_end = correct_time_range(date_listed, date_str, date_end)
-    return iter_time_range(security_code, date_str, date_end)
+
+    # Analyze the soup
+    table = soup.find('table', class_='h4')
+    first_row = table.find('tr')
+    columns = first_row.text.split('\n')
+    other_rows = first_row.find_next_siblings('tr')
+    return collect_securities(columns, other_rows)
 
 
 def search_listed_date(soup: BeautifulSoup) -> datetime.date:
@@ -116,27 +117,26 @@ def iter_time_range(security_code: str, date_str: datetime.date, date_end: datet
     return df_main
 
 
-def crawl_month_prices(date: datetime.date, security_code: str) -> dict:
-    date_input = str(date).replace('-', '')
-    url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-    payload = {
-        'response': 'json',
-        'date': date_input,
-        'stockNo': security_code
-    }
+def get_security_prices(
+        security_code: str,
+        date_str: datetime.date = DATE_TRACEABLE,
+        date_end: datetime.date = DATE_TODAY) -> pd.DataFrame:
+    '''
+    Collect the prices for the specific stock index for all time.
+    '''
+    url = "https://isin.twse.com.tw/isin/single_main.jsp?"
+    payload = {'owncode': security_code, 'stockname': ''}
     headers = {'user-agent': AGENT}
     response = requests.get(url, params=payload, headers=headers)
-    date_show = date.strftime('%Y/%m')
-    msg = f'Collecting the prices of {security_code} in {date_show}..'
-    print(msg)
-    return eval(response.text)
-
-
-def get_next_month(date: datetime.date) -> datetime.date:
-    if date.month < 12:
-        return datetime.date(date.year, date.month+1, 1)
-    else:
-        return datetime.date(date.year+1, 1, 1)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    date_listed = search_listed_date(soup)
+    try:
+        check_time_range(date_listed, date_str, date_end)
+    except Exception as e:
+        print(e)
+        quit()
+    date_str, date_end = correct_time_range(date_listed, date_str, date_end)
+    return iter_time_range(security_code, date_str, date_end)
 
 
 if __name__ == '__main__':

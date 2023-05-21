@@ -14,6 +14,30 @@ def dataframe_to_docs(df: pandas.DataFrame) -> List[Dict]:
     return [row.to_dict() for idx, row in df.iterrows()]
 
 
+def fetch_newest_security_prices(security_name: str, security_code: str):
+    try:
+        latest_timestamp = crud_mongo.get_latest_timestamp(
+            db_name=DB_NAME,
+            collection_name=security_name
+        )
+        security_prices = crawler.get_security_prices(
+            security_code=security_code,
+            date_str=latest_timestamp,
+            date_end=datetime.date.today()
+        )
+    except IndexError:  # this is a brand new collection
+        security_prices = crawler.get_security_prices(
+            security_code=security_code,
+            date_end=datetime.date.today()
+        )
+    return security_prices
+
+
+def rocdate_to_utc(rocdate: str) -> datetime.datetime:
+    year, month, day = map(int, rocdate.split('/'))
+    return datetime.datetime(year+1911, month, day)
+
+
 def dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> List[Dict]:
     docs = []
     for idx, row in df.iterrows():
@@ -32,11 +56,6 @@ def dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> List[Dict]:
         }
         docs.append(doc)
     return docs
-
-
-def rocdate_to_utc(rocdate: str) -> datetime.datetime:
-    year, month, day = map(int, rocdate.split('/'))
-    return datetime.datetime(year+1911, month, day)
 
 
 def main():
@@ -59,25 +78,6 @@ def main():
             collection_name=security_name,
             docs=docs
         )
-
-
-def fetch_newest_security_prices(security_name: str, security_code: str):
-    try:
-        latest_timestamp = crud_mongo.get_latest_timestamp(
-            db_name=DB_NAME,
-            collection_name=security_name
-        )
-        security_prices = crawler.get_security_prices(
-            security_code=security_code,
-            date_str=latest_timestamp,
-            date_end=datetime.date.today()
-        )
-    except IndexError:  # this is a brand new collection
-        security_prices = crawler.get_security_prices(
-            security_code=security_code,
-            date_end=datetime.date.today()
-        )
-    return security_prices
 
 
 if __name__ == '__main__':
