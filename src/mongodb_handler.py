@@ -88,7 +88,7 @@ def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
 
 
 @close_client
-def insert_docs(collection: Collection, docs: List[Dict]):
+def insert_documents(collection: Collection, docs: List[Dict]):
     is_timeseries = 'timeseries' in collection.options()
     queries = generate_queries(docs, is_timeseries)
     for query, doc in zip(queries, docs):
@@ -101,7 +101,7 @@ def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Di
         db_name=db_name,
         collection_name=collection_name,
     )
-    insert_docs(collection, docs)
+    insert_documents(collection, docs)
 
 
 @connect_mongodb()
@@ -123,7 +123,7 @@ def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List
         db_name=db_name,
         collection_name=collection_name,
     )
-    insert_docs(collection, docs)
+    insert_documents(collection, docs)
 
 
 def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.date:

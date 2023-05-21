@@ -3,47 +3,47 @@ from typing import Dict, List
 
 import pandas
 
-import crawler
-import crud_mongo
+import security_crawler
+import mongodb_handler
 
 
 DB_NAME = 'taiwan_securities'
 
 
-def dataframe_to_docs(df: pandas.DataFrame) -> List[Dict]:
+def convert_dataframe_to_documents(df: pandas.DataFrame) -> List[Dict]:
     return [row.to_dict() for idx, row in df.iterrows()]
 
 
-def fetch_newest_security_prices(security_name: str, security_code: str):
+def fetch_newest_prices(security_name: str, security_code: str):
     try:
-        latest_timestamp = crud_mongo.get_latest_timestamp(
+        latest_timestamp = mongodb_handler.get_latest_timestamp(
             db_name=DB_NAME,
             collection_name=security_name
         )
-        security_prices = crawler.get_security_prices(
+        security_prices = security_crawler.fetch_prices(
             security_code=security_code,
             date_str=latest_timestamp,
             date_end=datetime.date.today()
         )
     except IndexError:  # this is a brand new collection
-        security_prices = crawler.get_security_prices(
+        security_prices = security_crawler.fetch_prices(
             security_code=security_code,
             date_end=datetime.date.today()
         )
     return security_prices
 
 
-def rocdate_to_utc(rocdate: str) -> datetime.datetime:
+def convert_rocdate_to_utcdate(rocdate: str) -> datetime.datetime:
     year, month, day = map(int, rocdate.split('/'))
     return datetime.datetime(year+1911, month, day)
 
 
-def dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> List[Dict]:
+def convert_dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> List[Dict]:
     docs = []
     for idx, row in df.iterrows():
         doc = {
             'metadata': metadata,
-            'timestamp': rocdate_to_utc(row['日期']),
+            'timestamp': convert_rocdate_to_utcdate(row['日期']),
             'opening_price': float(row['開盤價']),
             'closing_price': float(row['收盤價']),
             'lowest_price': float(row['最低價']),
@@ -59,21 +59,21 @@ def dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> List[Dict]:
 
 
 def main():
-    securities = crawler.get_security_table()
-    docs = dataframe_to_docs(securities)
-    crud_mongo.connect_and_insert_general(
+    securities = security_crawler.fetch_security_table()
+    docs = convert_dataframe_to_documents(securities)
+    mongodb_handler.connect_and_insert_general(
         db_name=DB_NAME,
         collection_name='security_info',
         docs=docs
     )
 
-    for idx, row in securities.iterrows():
-        security_name = row['有價證券名稱']
-        security_code = row['有價證券代號']
-        metadata = row.to_dict()
-        security_prices = fetch_newest_security_prices(security_name, security_code)
-        docs = dataframe_to_timeseries(security_prices, metadata)
-        crud_mongo.connect_and_insert_timeseries(
+    for idx, security in securities.iterrows():
+        security_name = security['有價證券名稱']
+        security_code = security['有價證券代號']
+        metadata = security.to_dict()
+        security_prices = fetch_newest_prices(security_name, security_code)
+        docs = convert_dataframe_to_timeseries(security_prices, metadata)
+        mongodb_handler.connect_and_insert_timeseries(
             db_name=DB_NAME,
             collection_name=security_name,
             docs=docs

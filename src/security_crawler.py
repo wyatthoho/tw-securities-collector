@@ -6,12 +6,12 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup, ResultSet
 
-AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
+USER_AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
 
 
-def crawl_month_prices(date: datetime.date, security_code: str) -> dict:
+def crawl_monthly_prices(date: datetime.date, security_code: str) -> dict:
     date_input = str(date).replace('-', '')
     url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
     payload = {
@@ -19,7 +19,7 @@ def crawl_month_prices(date: datetime.date, security_code: str) -> dict:
         'date': date_input,
         'stockNo': security_code
     }
-    headers = {'user-agent': AGENT}
+    headers = {'user-agent': USER_AGENT}
     response = requests.get(url, params=payload, headers=headers)
     date_show = date.strftime('%Y/%m')
     msg = f'Collecting the prices of {security_code} in {date_show}..'
@@ -57,13 +57,13 @@ def collect_securities(columns: list, rows: ResultSet):
     return df
 
 
-def get_security_table() -> pd.DataFrame:
+def fetch_security_table() -> pd.DataFrame:
     '''
     Collect the table of securities from Taiwan Stock Exchange.
     '''
     # Get the soup
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
-    headers = {'user-agent': AGENT}
+    headers = {'user-agent': USER_AGENT}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -104,12 +104,12 @@ def correct_time_range(date_listed: datetime.date, date_str: datetime.date, date
     return date_str, date_end
 
 
-def iter_time_range(security_code: str, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
+def iterate_time_range(security_code: str, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
     sleep_time = 5
     df_main = pd.DataFrame()
     date = date_str
     while date <= date_end:
-        content = crawl_month_prices(date, security_code)
+        content = crawl_monthly_prices(date, security_code)
         df_data = pd.DataFrame(content['data'], columns=content['fields'])
         df_main = pd.concat([df_main, df_data], ignore_index=True)
         date = get_next_month(date)
@@ -117,7 +117,7 @@ def iter_time_range(security_code: str, date_str: datetime.date, date_end: datet
     return df_main
 
 
-def get_security_prices(
+def fetch_prices(
         security_code: str,
         date_str: datetime.date = DATE_TRACEABLE,
         date_end: datetime.date = DATE_TODAY) -> pd.DataFrame:
@@ -126,7 +126,7 @@ def get_security_prices(
     '''
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     payload = {'owncode': security_code, 'stockname': ''}
-    headers = {'user-agent': AGENT}
+    headers = {'user-agent': USER_AGENT}
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     date_listed = search_listed_date(soup)
@@ -136,12 +136,12 @@ def get_security_prices(
         print(e)
         quit()
     date_str, date_end = correct_time_range(date_listed, date_str, date_end)
-    return iter_time_range(security_code, date_str, date_end)
+    return iterate_time_range(security_code, date_str, date_end)
 
 
 if __name__ == '__main__':
-    securities = get_security_table()
-    security_prices = get_security_prices(
+    securities = fetch_security_table()
+    security_prices = fetch_prices(
         security_code='2330',
         date_str=datetime.date(2022, 11, 1),
         date_end=datetime.date(2023, 4, 1)
