@@ -126,13 +126,13 @@ def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List
     insert_docs(collection, docs)
 
 
-def get_latest_timestamp(db_name: str, collection_name: str):
+def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.date:
     collection = get_timeseries_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
     latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
-    return latest_doc['timestamp']
+    return latest_doc['timestamp'].date()
 
 
 if __name__ == '__main__':
