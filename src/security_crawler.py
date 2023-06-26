@@ -28,7 +28,7 @@ def crawl_monthly_prices(date: datetime.date, security_code: str) -> dict:
     }
     headers = {'user-agent': USER_AGENT}
     response = requests.get(url, params=payload, headers=headers)
-    date_show = date.strftime('%Y/%m')
+    date_show = date.strftime('%Y-%m')
     msg = f'Collecting the prices of {security_code} in {date_show}..'
     logger.info(msg)
     return eval(response.text)
@@ -69,12 +69,14 @@ def fetch_security_table() -> pd.DataFrame:
     Collect the table of securities from Taiwan Stock Exchange.
     '''
     # Get the soup
+    logger.info('Fetching securities data from Taiwan Stock Exchange website..')
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     headers = {'user-agent': USER_AGENT}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     # Analyze the soup
+    logger.info('Cleaning and filtering data..')
     table = soup.find('table', class_='h4')
     first_row = table.find('tr')
     columns = first_row.text.split('\n')

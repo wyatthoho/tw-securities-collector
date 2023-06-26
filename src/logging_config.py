@@ -27,6 +27,9 @@ LOGGING_CONFIG = {
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
             'propagate': False
+        },
+        'urllib3': {
+            'propagate': False
         }
     }
 }
