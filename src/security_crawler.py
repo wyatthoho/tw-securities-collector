@@ -1,4 +1,6 @@
 import datetime
+import logging
+import logging.config
 import time
 from typing import Tuple
 
@@ -6,9 +8,14 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup, ResultSet
 
+from logging_config import LOGGING_CONFIG
+
 USER_AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
+
+logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger(__name__)
 
 
 def crawl_monthly_prices(date: datetime.date, security_code: str) -> dict:
@@ -23,7 +30,7 @@ def crawl_monthly_prices(date: datetime.date, security_code: str) -> dict:
     response = requests.get(url, params=payload, headers=headers)
     date_show = date.strftime('%Y/%m')
     msg = f'Collecting the prices of {security_code} in {date_show}..'
-    print(msg)
+    logger.info(msg)
     return eval(response.text)
 
 
@@ -133,7 +140,7 @@ def fetch_prices(
     try:
         check_time_range(date_listed, date_str, date_end)
     except Exception as e:
-        print(e)
+        logger.error(e)
         quit()
     date_str, date_end = correct_time_range(date_listed, date_str, date_end)
     return iterate_time_range(security_code, date_str, date_end)

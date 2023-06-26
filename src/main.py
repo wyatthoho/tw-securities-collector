@@ -3,8 +3,8 @@ from typing import Dict, List
 
 import pandas
 
-import security_crawler
 import mongodb_handler
+import security_crawler
 
 
 DB_NAME = 'taiwan_securities'

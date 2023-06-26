@@ -1,14 +1,21 @@
 import configparser
 import datetime
 import functools
+import logging
+import logging.config
 from typing import Dict, List, Protocol
 
 from pymongo import MongoClient, DESCENDING
 from pymongo.collection import Collection
 from pymongo.database import Database
 
+from logging_config import LOGGING_CONFIG
+
 
 CONFIG_FILE = '.\\src\\config.ini'
+
+logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger(__name__)
 
 
 def read_config() -> Dict[str, str]:
