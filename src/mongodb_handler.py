@@ -104,10 +104,12 @@ def insert_documents(collection: Collection, docs: List[Dict]):
 
 
 def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Dict]):
+    logger.info(f'Connecting to {db_name}..')
     collection = get_general_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
+    logger.info(f'Updating {collection_name}..')
     insert_documents(collection, docs)
 
 
@@ -126,18 +128,22 @@ def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
 
 
 def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List[Dict]):
+    logger.info(f'Connecting to {db_name}..')
     collection = get_timeseries_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
+    logger.info(f'Updating {collection_name}..')
     insert_documents(collection, docs)
 
 
 def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.date:
+    logger.info(f'Connecting to {db_name}..')
     collection = get_timeseries_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
+    logger.info(f'Searching the latest date..')
     latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
     return latest_doc['timestamp'].date()
 
