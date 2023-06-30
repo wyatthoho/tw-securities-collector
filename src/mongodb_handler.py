@@ -46,6 +46,7 @@ def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invali
     def decorator(func: OriginalFunc) -> DecoratedFunc:
         @functools.wraps(func)
         def wrapper(db_name: str, collection_name: str):
+            logger.info(f'Connecting to \"{db_name}\"..')
             client = MongoClient(
                 url,
                 tls=tls,
@@ -96,6 +97,7 @@ def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
 
 @close_client
 def insert_documents(collection: Collection, docs: List[Dict]):
+    logger.info(f'Updating \"{collection.name}\"..')
     is_timeseries = 'timeseries' in collection.options()
     queries = generate_queries(docs, is_timeseries)
     for query, doc in zip(queries, docs):
@@ -104,12 +106,10 @@ def insert_documents(collection: Collection, docs: List[Dict]):
 
 
 def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Dict]):
-    logger.info(f'Connecting to {db_name}..')
     collection = get_general_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
-    logger.info(f'Updating {collection_name}..')
     insert_documents(collection, docs)
 
 
@@ -128,22 +128,19 @@ def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
 
 
 def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List[Dict]):
-    logger.info(f'Connecting to {db_name}..')
     collection = get_timeseries_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
-    logger.info(f'Updating {collection_name}..')
     insert_documents(collection, docs)
 
 
 def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.date:
-    logger.info(f'Connecting to {db_name}..')
     collection = get_timeseries_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
-    logger.info(f'Searching the latest date..')
+    logger.info(f'Searching the latest date of \"{collection_name}\"..')
     latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
     return latest_doc['timestamp'].date()
 
