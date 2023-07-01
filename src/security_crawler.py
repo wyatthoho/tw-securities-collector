@@ -1,4 +1,6 @@
 import datetime
+import logging
+import logging.config
 import time
 from typing import Tuple
 
@@ -6,9 +8,14 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup, ResultSet
 
+from logging_config import LOGGING_CONFIG
+
 USER_AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
+
+logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger(__name__)
 
 
 def crawl_monthly_prices(date: datetime.date, security_code: str) -> dict:
@@ -21,9 +28,9 @@ def crawl_monthly_prices(date: datetime.date, security_code: str) -> dict:
     }
     headers = {'user-agent': USER_AGENT}
     response = requests.get(url, params=payload, headers=headers)
-    date_show = date.strftime('%Y/%m')
+    date_show = date.strftime('%Y-%m')
     msg = f'Collecting the prices of {security_code} in {date_show}..'
-    print(msg)
+    logger.info(msg)
     return eval(response.text)
 
 
@@ -62,12 +69,14 @@ def fetch_security_table() -> pd.DataFrame:
     Collect the table of securities from Taiwan Stock Exchange.
     '''
     # Get the soup
+    logger.info('Fetching securities data from Taiwan Stock Exchange website..')
     url = "https://isin.twse.com.tw/isin/single_main.jsp?"
     headers = {'user-agent': USER_AGENT}
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     # Analyze the soup
+    logger.info('Cleaning and filtering data..')
     table = soup.find('table', class_='h4')
     first_row = table.find('tr')
     columns = first_row.text.split('\n')
@@ -133,7 +142,7 @@ def fetch_prices(
     try:
         check_time_range(date_listed, date_str, date_end)
     except Exception as e:
-        print(e)
+        logger.error(e)
         quit()
     date_str, date_end = correct_time_range(date_listed, date_str, date_end)
     return iterate_time_range(security_code, date_str, date_end)
