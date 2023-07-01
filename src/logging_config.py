@@ -19,7 +19,8 @@ LOGGING_CONFIG = {
             'level': 'DEBUG',
             'formatter': 'standard',
             'filename': 'info.log',
-            'mode': 'w'
+            'mode': 'w',
+            'encoding': 'UTF-8'
         }
     },
     'loggers': {

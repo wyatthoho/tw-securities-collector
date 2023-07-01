@@ -1,13 +1,19 @@
 import datetime
+import logging
+import logging.config
 from typing import Dict, List
 
 import pandas
 
 import mongodb_handler
 import security_crawler
+from logging_config import LOGGING_CONFIG
 
 
 DB_NAME = 'taiwan_securities'
+
+logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger()
 
 
 def convert_dataframe_to_documents(df: pandas.DataFrame) -> List[Dict]:
@@ -59,6 +65,7 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> Lis
 
 
 def main():
+    logger.info('Start!')
     securities = security_crawler.fetch_security_table()
     docs = convert_dataframe_to_documents(securities)
     mongodb_handler.connect_and_insert_general(
@@ -78,6 +85,7 @@ def main():
             collection_name=security_name,
             docs=docs
         )
+    logger.info('Done!')
 
 
 if __name__ == '__main__':
