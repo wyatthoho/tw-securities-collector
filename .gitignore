@@ -2,5 +2,5 @@ __pycache__/
 .vscode/
 env/
 *.py[cod]
-*.ini
+# *.ini
 *.log

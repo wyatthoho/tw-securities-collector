@@ -12,7 +12,7 @@ from pymongo.database import Database
 from logging_config import LOGGING_CONFIG
 
 
-CONFIG_FILE = '.\\src\\config.ini'
+CONFIG_FILE = './src/config.ini'
 
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
