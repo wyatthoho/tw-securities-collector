@@ -1,8 +1,8 @@
-name: Test Crawler
+name: main
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,4 +21,4 @@ jobs:
           pip install -r requirements.txt
 
       - name: execute py script
-        run: python ./src/security_crawler.py
+        run: python ./src/main.py
