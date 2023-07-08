@@ -11,6 +11,8 @@ from logging_config import LOGGING_CONFIG
 
 
 DB_NAME = 'taiwan_securities'
+DATE_TRACEABLE = datetime.date(2010, 1, 1)
+DATE_TODAY = datetime.date.today()
 
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger()
@@ -18,25 +20,6 @@ logger = logging.getLogger()
 
 def convert_dataframe_to_documents(df: pandas.DataFrame) -> List[Dict]:
     return [row.to_dict() for idx, row in df.iterrows()]
-
-
-def fetch_newest_prices(security_name: str, security_code: str):
-    try:
-        latest_timestamp = mongodb_handler.get_latest_timestamp(
-            db_name=DB_NAME,
-            collection_name=security_name
-        )
-        security_prices = security_crawler.fetch_prices(
-            security_code=security_code,
-            date_str=latest_timestamp,
-            date_end=datetime.date.today()
-        )
-    except IndexError:  # this is a brand new collection
-        security_prices = security_crawler.fetch_prices(
-            security_code=security_code,
-            date_end=datetime.date.today()
-        )
-    return security_prices
 
 
 def convert_rocdate_to_utcdate(rocdate: str) -> datetime.datetime:
@@ -64,6 +47,40 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> Lis
     return docs
 
 
+def get_start_date(security_name: str, security_code: str) -> datetime.date:
+    try:
+        latest_timestamp = mongodb_handler.get_latest_timestamp(
+            db_name=DB_NAME,
+            collection_name=security_name
+        )
+        return latest_timestamp + datetime.timedelta(days=1)
+    except IndexError:  # this is a brand new collection
+        date_listed = security_crawler.search_listed_date(security_code)
+        return max(DATE_TRACEABLE, date_listed)
+
+
+def get_next_month(date: datetime.date) -> datetime.date:
+    if date.month < 12:
+        return datetime.date(date.year, date.month+1, 1)
+    else:
+        return datetime.date(date.year+1, 1, 1)
+
+
+def iter_monthly(security_name: str, security_code: str, metadata: dict, date_tgt: datetime.date):
+    while date_tgt <= DATE_TODAY:
+        security_prices = security_crawler.fetch_monthly_prices(
+            security_code=security_code,
+            date_tgt=date_tgt
+        )
+        docs = convert_dataframe_to_timeseries(security_prices, metadata)
+        mongodb_handler.connect_and_insert_timeseries(
+            db_name=DB_NAME,
+            collection_name=security_name,
+            docs=docs
+        )
+        date_tgt = get_next_month(date_tgt)
+
+
 def main():
     logger.info('Start!')
     securities = security_crawler.fetch_security_table()
@@ -78,13 +95,9 @@ def main():
         security_name = security['有價證券名稱']
         security_code = security['有價證券代號']
         metadata = security.to_dict()
-        security_prices = fetch_newest_prices(security_name, security_code)
-        docs = convert_dataframe_to_timeseries(security_prices, metadata)
-        mongodb_handler.connect_and_insert_timeseries(
-            db_name=DB_NAME,
-            collection_name=security_name,
-            docs=docs
-        )
+        date_tgt = get_start_date(security_name, security_code)
+        iter_monthly(security_name, security_code, metadata, date_tgt)
+
     logger.info('Done!')
 
 
