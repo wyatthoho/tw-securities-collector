@@ -11,8 +11,6 @@ from bs4 import BeautifulSoup, ResultSet
 from logging_config import LOGGING_CONFIG
 
 USER_AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
-DATE_TRACEABLE = datetime.date(2010, 1, 1)
-DATE_TODAY = datetime.date.today()
 
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
@@ -78,24 +76,7 @@ def search_listed_date(security_code: str) -> datetime.date:
             return datetime.date(year, month, day)
 
 
-def check_time_range(date_listed: datetime.date, date_tgt: datetime.date):
-    date_earliest = max(DATE_TRACEABLE, date_listed)
-    if date_tgt < date_earliest:
-        raise Exception(
-            f'The start date can not be earlier than {date_earliest}.'
-        )
-    elif date_tgt > DATE_TODAY:
-        raise Exception(f'The target date can not be later than {DATE_TODAY}.')
-
-
 def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.DataFrame:
-    try:
-        date_listed = search_listed_date(security_code)
-        check_time_range(date_listed, date_tgt)
-    except Exception as e:
-        logger.error(e)
-        quit()
-
     date_show = date_tgt.strftime('%Y-%m')
     msg = f'Collecting the prices of {security_code} in {date_show}..'
     logger.info(msg)
@@ -115,6 +96,7 @@ def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.Data
 
 if __name__ == '__main__':
     securities = fetch_security_table()
+    date_listed = search_listed_date('2330')
     security_prices = fetch_monthly_prices(
         security_code='2330',
         date_tgt=datetime.date(2022, 11, 4)
