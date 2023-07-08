@@ -18,29 +18,6 @@ logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
 
-def crawl_monthly_prices(date: datetime.date, security_code: str) -> dict:
-    date_input = str(date).replace('-', '')
-    url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-    payload = {
-        'response': 'json',
-        'date': date_input,
-        'stockNo': security_code
-    }
-    headers = {'user-agent': USER_AGENT}
-    response = requests.get(url, params=payload, headers=headers)
-    date_show = date.strftime('%Y-%m')
-    msg = f'Collecting the prices of {security_code} in {date_show}..'
-    logger.info(msg)
-    return eval(response.text)
-
-
-def get_next_month(date: datetime.date) -> datetime.date:
-    if date.month < 12:
-        return datetime.date(date.year, date.month+1, 1)
-    else:
-        return datetime.date(date.year+1, 1, 1)
-
-
 def security_filter(data: dict) -> bool:
     cond1 = not data['有價證券代號'][-1].isalpha()
     cond2 = not data['有價證券代號'][0].isalpha()
@@ -84,7 +61,13 @@ def fetch_security_table() -> pd.DataFrame:
     return collect_securities(columns, other_rows)
 
 
-def search_listed_date(soup: BeautifulSoup) -> datetime.date:
+def search_listed_date(security_code: str) -> datetime.date:
+    url = "https://isin.twse.com.tw/isin/single_main.jsp?"
+    payload = {'owncode': security_code, 'stockname': ''}
+    headers = {'user-agent': USER_AGENT}
+    response = requests.get(url, params=payload, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
     td_all = soup.find_all('td')
     for element in td_all:
         text = element.get_text()
@@ -105,34 +88,34 @@ def check_time_range(date_listed: datetime.date, date_tgt: datetime.date):
         raise Exception(f'The target date can not be later than {DATE_TODAY}.')
 
 
-def fetch_prices(
-        security_code: str,
-        date_tgt: datetime.date) -> pd.DataFrame:
-    '''
-    Collect the prices for the specific stock index for all time.
-    '''
-    url = "https://isin.twse.com.tw/isin/single_main.jsp?"
-    payload = {'owncode': security_code, 'stockname': ''}
-    headers = {'user-agent': USER_AGENT}
-    response = requests.get(url, params=payload, headers=headers)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    date_listed = search_listed_date(soup)
-    
+def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.DataFrame:
     try:
+        date_listed = search_listed_date(security_code)
         check_time_range(date_listed, date_tgt)
     except Exception as e:
         logger.error(e)
         quit()
 
-    date_tgt = max(DATE_TRACEABLE, date_listed, date_tgt)
-    content = crawl_monthly_prices(date_tgt, security_code)
+    date_show = date_tgt.strftime('%Y-%m')
+    msg = f'Collecting the prices of {security_code} in {date_show}..'
+    logger.info(msg)
+
+    url = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+    payload = {
+        'response': 'json',
+        'date': str(date_tgt).replace('-', ''),
+        'stockNo': security_code
+    }
+    headers = {'user-agent': USER_AGENT}
+    response = requests.get(url, params=payload, headers=headers)
+    content = eval(response.text)
     df_data = pd.DataFrame(content['data'], columns=content['fields'])
     return df_data
 
 
 if __name__ == '__main__':
     securities = fetch_security_table()
-    security_prices = fetch_prices(
+    security_prices = fetch_monthly_prices(
         security_code='2330',
-        date_tgt=datetime.date(2022, 11, 1)
+        date_tgt=datetime.date(2022, 11, 4)
     )
