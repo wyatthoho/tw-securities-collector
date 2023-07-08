@@ -66,6 +66,21 @@ def get_next_month(date: datetime.date) -> datetime.date:
         return datetime.date(date.year+1, 1, 1)
 
 
+def iter_monthly(security_name: str, security_code: str, metadata: dict, date_tgt: datetime.date):
+    while date_tgt <= DATE_TODAY:
+        security_prices = security_crawler.fetch_monthly_prices(
+            security_code=security_code,
+            date_tgt=date_tgt
+        )
+        docs = convert_dataframe_to_timeseries(security_prices, metadata)
+        mongodb_handler.connect_and_insert_timeseries(
+            db_name=DB_NAME,
+            collection_name=security_name,
+            docs=docs
+        )
+        date_tgt = get_next_month(date_tgt)
+
+
 def main():
     logger.info('Start!')
     securities = security_crawler.fetch_security_table()
@@ -81,18 +96,8 @@ def main():
         security_code = security['有價證券代號']
         metadata = security.to_dict()
         date_tgt = get_start_date(security_name, security_code)
-        while date_tgt <= DATE_TODAY:
-            security_prices = security_crawler.fetch_monthly_prices(
-                security_code=security_code,
-                date_tgt=date_tgt
-            )
-            docs = convert_dataframe_to_timeseries(security_prices, metadata)
-            mongodb_handler.connect_and_insert_timeseries(
-                db_name=DB_NAME,
-                collection_name=security_name,
-                docs=docs
-            )
-            date_tgt = get_next_month(date_tgt)
+        iter_monthly(security_name, security_code, metadata, date_tgt)
+
     logger.info('Done!')
 
 
