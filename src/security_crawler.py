@@ -95,41 +95,19 @@ def search_listed_date(soup: BeautifulSoup) -> datetime.date:
             return datetime.date(year, month, day)
 
 
-def check_time_range(date_listed: datetime.date, date_str: datetime.date, date_end: datetime.date):
+def check_time_range(date_listed: datetime.date, date_tgt: datetime.date):
     date_earliest = max(DATE_TRACEABLE, date_listed)
-    if date_str > date_end:
-        raise Exception('The start date is later than the end date.')
-    elif date_str < date_earliest:
+    if date_tgt < date_earliest:
         raise Exception(
             f'The start date can not be earlier than {date_earliest}.'
         )
-    elif date_end > DATE_TODAY:
-        raise Exception(f'The end date can not be later than {DATE_TODAY}.')
-
-
-def correct_time_range(date_listed: datetime.date, date_str: datetime.date, date_end: datetime.date) -> Tuple[datetime.date, datetime.date]:
-    date_str = max(DATE_TRACEABLE, date_listed, date_str)
-    date_end = min(DATE_TODAY, date_end)
-    return date_str, date_end
-
-
-def iterate_time_range(security_code: str, date_str: datetime.date, date_end: datetime.date) -> pd.DataFrame:
-    sleep_time = 5
-    df_main = pd.DataFrame()
-    date = date_str
-    while date <= date_end:
-        content = crawl_monthly_prices(date, security_code)
-        df_data = pd.DataFrame(content['data'], columns=content['fields'])
-        df_main = pd.concat([df_main, df_data], ignore_index=True)
-        date = get_next_month(date)
-        time.sleep(sleep_time)
-    return df_main
+    elif date_tgt > DATE_TODAY:
+        raise Exception(f'The target date can not be later than {DATE_TODAY}.')
 
 
 def fetch_prices(
         security_code: str,
-        date_str: datetime.date = DATE_TRACEABLE,
-        date_end: datetime.date = DATE_TODAY) -> pd.DataFrame:
+        date_tgt: datetime.date) -> pd.DataFrame:
     '''
     Collect the prices for the specific stock index for all time.
     '''
@@ -139,19 +117,22 @@ def fetch_prices(
     response = requests.get(url, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
     date_listed = search_listed_date(soup)
+    
     try:
-        check_time_range(date_listed, date_str, date_end)
+        check_time_range(date_listed, date_tgt)
     except Exception as e:
         logger.error(e)
         quit()
-    date_str, date_end = correct_time_range(date_listed, date_str, date_end)
-    return iterate_time_range(security_code, date_str, date_end)
+
+    date_tgt = max(DATE_TRACEABLE, date_listed, date_tgt)
+    content = crawl_monthly_prices(date_tgt, security_code)
+    df_data = pd.DataFrame(content['data'], columns=content['fields'])
+    return df_data
 
 
 if __name__ == '__main__':
     securities = fetch_security_table()
     security_prices = fetch_prices(
         security_code='2330',
-        date_str=datetime.date(2022, 11, 1),
-        date_end=datetime.date(2023, 4, 1)
+        date_tgt=datetime.date(2022, 11, 1)
     )

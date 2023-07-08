@@ -28,7 +28,7 @@ def fetch_newest_prices(security_name: str, security_code: str):
         )
         security_prices = security_crawler.fetch_prices(
             security_code=security_code,
-            date_str=latest_timestamp,
+            date_tgt=latest_timestamp,
             date_end=datetime.date.today()
         )
     except IndexError:  # this is a brand new collection
