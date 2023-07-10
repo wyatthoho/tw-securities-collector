@@ -145,6 +145,15 @@ def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.date:
     return latest_doc['timestamp'].date()
 
 
+def get_daily_doc(db_name: str, collection_name: str, datetime: datetime.datetime):
+    collection = get_timeseries_collection(
+        db_name=db_name,
+        collection_name=collection_name,
+    )
+    doc = collection.find_one({'timestamp': datetime})
+    return doc
+
+
 if __name__ == '__main__':
     general_docs = [
         {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
@@ -187,4 +196,10 @@ if __name__ == '__main__':
     latest_timestamp = get_latest_timestamp(
         db_name='test_db',
         collection_name='patient_condition',
+    )
+
+    doc = get_daily_doc(
+        db_name='test_db',
+        collection_name='patient_condition',
+        datetime=datetime.datetime(2021, 5, 20)
     )
