@@ -111,24 +111,19 @@ def iter_monthly(security_name: str, security_code: str, metadata: dict, date_tg
 
 def main():
     logger.info('Start!')
-    # securities = security_crawler.fetch_security_table()
-    # docs = convert_dataframe_to_documents(securities)
-    # mongodb_handler.connect_and_insert_general(
-    #     db_name=DB_NAME,
-    #     collection_name='security_info',
-    #     docs=docs
-    # )
-    # for idx, security in securities.iterrows():
-    #     security_name = security['有價證券名稱']
-    #     security_code = security['有價證券代號']
-    #     metadata = security.to_dict()
-    #     date_tgt = get_start_date(security_name, security_code)
-    #     iter_monthly(security_name, security_code, metadata, date_tgt)
-    security_name = '富邦科技'
-    security_code = '0052'
-    metadata = {'有價證券名稱': '富邦科技'}
-    date_tgt = get_start_date(security_name, security_code)
-    iter_monthly(security_name, security_code, metadata, date_tgt)
+    securities = security_crawler.fetch_security_table()
+    docs = convert_dataframe_to_documents(securities)
+    mongodb_handler.connect_and_insert_general(
+        db_name=DB_NAME,
+        collection_name='security_info',
+        docs=docs
+    )
+    for idx, security in securities.iterrows():
+        security_name = security['有價證券名稱']
+        security_code = security['有價證券代號']
+        metadata = security.to_dict()
+        date_tgt = get_start_date(security_name, security_code)
+        iter_monthly(security_name, security_code, metadata, date_tgt)
     logger.info('Done!')
 
 
