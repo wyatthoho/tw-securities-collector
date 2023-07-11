@@ -135,14 +135,14 @@ def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List
     insert_documents(collection, docs)
 
 
-def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.date:
+def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.datetime:
     collection = get_timeseries_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
     logger.info(f'Searching the latest date of \"{collection_name}\"..')
     latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
-    return latest_doc['timestamp'].date()
+    return latest_doc['timestamp']
 
 
 def get_daily_doc(db_name: str, collection_name: str, datetime: datetime.datetime):
