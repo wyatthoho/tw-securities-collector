@@ -47,30 +47,13 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> Lis
                 security_name = metadata['有價證券名稱']
                 pre_date = mongodb_handler.get_latest_timestamp(DB_NAME, security_name)
                 pre_doc = mongodb_handler.get_daily_doc(DB_NAME, security_name, pre_date)
-                doc = {
-                    'metadata': metadata,
-                    'timestamp': convert_rocdate_to_utcdate(row['日期']),
-                    'opening_price': float(pre_doc['opening_price']),
-                    'closing_price': float(pre_doc['closing_price']),
-                    'lowest_price': float(pre_doc['lowest_price']),
-                    'highest_price': float(pre_doc['highest_price']),
-                    'number_trades': 0,
-                    'traded_volume': 0,
-                    'traded_value': 0,
-                }
             else:
                 pre_doc = docs[idx-1]
-                doc = {
-                    'metadata': metadata,
-                    'timestamp': convert_rocdate_to_utcdate(row['日期']),
-                    'opening_price': float(pre_doc['opening_price']),
-                    'closing_price': float(pre_doc['closing_price']),
-                    'lowest_price': float(pre_doc['lowest_price']),
-                    'highest_price': float(pre_doc['highest_price']),
-                    'number_trades': 0,
-                    'traded_volume': 0,
-                    'traded_value': 0,
-                }
+            doc = pre_doc
+            doc['timestamp'] = convert_rocdate_to_utcdate(row['日期'])
+            doc['number_trades'] = 0
+            doc['traded_volume'] = 0
+            doc['traded_value'] = 0
         docs.append(doc)
     return docs
 
