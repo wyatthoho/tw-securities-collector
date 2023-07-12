@@ -90,14 +90,18 @@ def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.Data
     headers = {'user-agent': USER_AGENT}
     response = requests.get(url, params=payload, headers=headers)
     content = eval(response.text)
-    df_data = pd.DataFrame(content['data'], columns=content['fields'])
+    try:
+        df_data = pd.DataFrame(content['data'], columns=content['fields'])
+    except KeyError:
+        logger.error(f'{content}\n', exc_info=True)
+        quit()
     return df_data
 
 
 if __name__ == '__main__':
     securities = fetch_security_table()
-    date_listed = search_listed_date('2330')
+    date_listed = search_listed_date('00639')
     security_prices = fetch_monthly_prices(
-        security_code='2330',
-        date_tgt=datetime.date(2022, 11, 4)
+        security_code='00639',
+        date_tgt=datetime.date(2015, 12, 1)
     )
