@@ -46,7 +46,6 @@ def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invali
     def decorator(func: OriginalFunc) -> DecoratedFunc:
         @functools.wraps(func)
         def wrapper(db_name: str, collection_name: str):
-            logger.info(f'Connecting to \"{db_name}\"..')
             client = MongoClient(
                 url,
                 tls=tls,
@@ -97,7 +96,7 @@ def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
 
 @close_client
 def insert_documents(collection: Collection, docs: List[Dict]):
-    logger.info(f'Updating \"{collection.name}\"..')
+    logger.info(f'Updating {collection.name}..')
     is_timeseries = 'timeseries' in collection.options()
     queries = generate_queries(docs, is_timeseries)
     for query, doc in zip(queries, docs):
@@ -140,7 +139,6 @@ def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.datetim
         db_name=db_name,
         collection_name=collection_name,
     )
-    logger.info(f'Searching the latest date of \"{collection_name}\"..')
     latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
     return latest_doc['timestamp']
 
