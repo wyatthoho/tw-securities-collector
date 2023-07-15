@@ -79,10 +79,14 @@ def get_next_month(date: datetime.date) -> datetime.date:
 
 def iter_monthly(security_name: str, security_code: str, metadata: dict, date_tgt: datetime.date):
     while date_tgt <= DATE_TODAY:
-        security_prices = security_crawler.fetch_monthly_prices(
-            security_code=security_code,
-            date_tgt=date_tgt
-        )
+        try:
+            security_prices = security_crawler.fetch_monthly_prices(
+                security_code=security_code,
+                date_tgt=date_tgt
+            )
+        except Exception as e:
+            logger.warning(e)
+            break
         docs = convert_dataframe_to_timeseries(security_prices, metadata)
         mongodb_handler.connect_and_insert_timeseries(
             db_name=DB_NAME,

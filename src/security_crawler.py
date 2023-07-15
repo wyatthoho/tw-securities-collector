@@ -1,8 +1,6 @@
 import datetime
 import logging
 import logging.config
-import time
-from typing import Tuple
 
 import pandas as pd
 import requests
@@ -90,12 +88,10 @@ def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.Data
     headers = {'user-agent': USER_AGENT}
     response = requests.get(url, params=payload, headers=headers)
     content = eval(response.text)
-    try:
-        df_data = pd.DataFrame(content['data'], columns=content['fields'])
-    except KeyError:
-        logger.error(f'{content}\n', exc_info=True)
-        quit()
-    return df_data
+    if content['stat'] == '查詢日期大於今日，請重新查詢!':
+        raise Exception(f'Fetch failed for {date_tgt}')
+    else:
+        return pd.DataFrame(content['data'], columns=content['fields'])
 
 
 if __name__ == '__main__':
