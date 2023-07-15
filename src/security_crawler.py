@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def security_filter(data: dict) -> bool:
     cond1 = not data['有價證券代號'][-1].isalpha()
     cond2 = not data['有價證券代號'][0].isalpha()
-    cond3 = data['市場別'] not in ['上櫃', '期貨及選擇權', '興櫃一般板', '公開發行', '創櫃版']
+    cond3 = data['市場別'] not in ['上市', ]
     cond4 = data['有價證券別'] in ['ETF', '股票']
     return all([cond1, cond2, cond3, cond4])
 
