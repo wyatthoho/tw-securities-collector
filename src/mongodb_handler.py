@@ -67,13 +67,13 @@ def get_general_collection(db: Database, collection_name: str) -> Collection:
 
 
 def close_client(func):
-    def wrapper(collection: Collection, docs: List[Dict]):
-        func(collection, docs)
+    def wrapper(collection: Collection, docs: List[Dict], with_metadata: bool):
+        func(collection, docs, with_metadata)
         collection.database.client.close()
     return wrapper
 
 
-def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
+def generate_queries(docs: List[Dict], with_metadata: bool) -> List[Dict]:
     '''
     If it is a collection of time series, each document has a subdocument
     called `metadata`. Using the `find_one` method to query any document
@@ -81,7 +81,7 @@ def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
     Therefore, an alternative approach is used where each field is matched
     individually to query the subdocument.
     '''
-    if is_timeseries:
+    if with_metadata:
         queries = []
         for doc in docs:
             query = doc.copy()
@@ -95,10 +95,9 @@ def generate_queries(docs: List[Dict], is_timeseries: bool) -> List[Dict]:
 
 
 @close_client
-def insert_documents(collection: Collection, docs: List[Dict]):
+def insert_documents(collection: Collection, docs: List[Dict], with_metadata: bool):
     logger.info(f'Updating {collection.name}..')
-    is_timeseries = 'timeseries' in collection.options()
-    queries = generate_queries(docs, is_timeseries)
+    queries = generate_queries(docs, with_metadata)
     for query, doc in zip(queries, docs):
         if not collection.find_one(query):
             collection.insert_one(doc)
@@ -109,7 +108,7 @@ def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Di
         db_name=db_name,
         collection_name=collection_name,
     )
-    insert_documents(collection, docs)
+    insert_documents(collection, docs, False)
 
 
 @connect_mongodb()
@@ -126,12 +125,12 @@ def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
         return db.get_collection(collection_name)
 
 
-def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List[Dict]):
+def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List[Dict], with_metadata: bool):
     collection = get_timeseries_collection(
         db_name=db_name,
         collection_name=collection_name,
     )
-    insert_documents(collection, docs)
+    insert_documents(collection, docs, with_metadata)
 
 
 def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.datetime:
@@ -188,7 +187,8 @@ if __name__ == '__main__':
     connect_and_insert_timeseries(
         db_name='test_db',
         collection_name='patient_condition',
-        docs=timeseries_docs
+        docs=timeseries_docs,
+        with_metadata=False
     )
 
     latest_timestamp = get_latest_timestamp(

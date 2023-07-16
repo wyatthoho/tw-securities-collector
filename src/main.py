@@ -27,12 +27,11 @@ def convert_rocdate_to_utcdate(rocdate: str) -> datetime.datetime:
     return datetime.datetime(year+1911, month, day)
 
 
-def convert_dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> List[Dict]:
+def convert_dataframe_to_timeseries(collection_name: str, df: pandas.DataFrame) -> List[Dict]:
     docs = []
     for idx, row in df.iterrows():
         try:
             doc = {
-                'metadata': metadata,
                 'timestamp': convert_rocdate_to_utcdate(row['日期']),
                 'opening_price': float(row['開盤價']),
                 'closing_price': float(row['收盤價']),
@@ -44,9 +43,8 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> Lis
             }
         except ValueError:
             if idx == 0:
-                security_name = metadata['有價證券名稱']
-                pre_date = mongodb_handler.get_latest_timestamp(DB_NAME, security_name)
-                pre_doc = mongodb_handler.get_daily_doc(DB_NAME, security_name, pre_date)
+                pre_date = mongodb_handler.get_latest_timestamp(DB_NAME, collection_name)
+                pre_doc = mongodb_handler.get_daily_doc(DB_NAME, collection_name, pre_date)
             else:
                 pre_doc = docs[idx-1]
             doc = pre_doc
@@ -77,7 +75,7 @@ def get_next_month(date: datetime.date) -> datetime.date:
         return datetime.date(date.year+1, 1, 1)
 
 
-def iter_monthly(collection_name: str, security_code: str, metadata: dict, date_tgt: datetime.date):
+def iter_monthly(collection_name: str, security_code: str, date_tgt: datetime.date):
     while date_tgt <= DATE_TODAY:
         try:
             security_prices = security_crawler.fetch_monthly_prices(
@@ -87,11 +85,12 @@ def iter_monthly(collection_name: str, security_code: str, metadata: dict, date_
         except Exception as e:
             logger.warning(e)
             break
-        docs = convert_dataframe_to_timeseries(security_prices, metadata)
+        docs = convert_dataframe_to_timeseries(collection_name, security_prices)
         mongodb_handler.connect_and_insert_timeseries(
             db_name=DB_NAME,
             collection_name=collection_name,
-            docs=docs
+            docs=docs,
+            with_metadata=False
         )
         date_tgt = get_next_month(date_tgt)
 
@@ -109,9 +108,8 @@ def main():
         security_name = security['有價證券名稱']
         security_code = security['有價證券代號']
         collection_name = f'{security_name} ({security_code})'
-        metadata = security.to_dict()
         date_tgt = get_start_date(collection_name, security_code)
-        iter_monthly(collection_name, security_code, metadata, date_tgt)
+        iter_monthly(collection_name, security_code, date_tgt)
 
 
 if __name__ == '__main__':
