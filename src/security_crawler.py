@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def security_filter(data: dict) -> bool:
     cond1 = not data['有價證券代號'][-1].isalpha()
     cond2 = not data['有價證券代號'][0].isalpha()
-    cond3 = data['市場別'] not in ['上市', ]
+    cond3 = data['市場別'] in ['上市', ]
     cond4 = data['有價證券別'] in ['ETF', '股票']
     return all([cond1, cond2, cond3, cond4])
 
@@ -88,7 +88,7 @@ def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.Data
     headers = {'user-agent': USER_AGENT}
     response = requests.get(url, params=payload, headers=headers)
     content = eval(response.text)
-    if content['stat'] == '查詢日期大於今日，請重新查詢!':
+    if content['stat'] != 'OK':
         raise Exception(f'Fetch failed for {date_tgt}')
     else:
         return pd.DataFrame(content['data'], columns=content['fields'])

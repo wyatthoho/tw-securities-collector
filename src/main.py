@@ -58,11 +58,11 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, metadata: Dict) -> Lis
     return docs
 
 
-def get_start_date(security_name: str, security_code: str) -> datetime.date:
+def get_start_date(collection_name: str, security_code: str) -> datetime.date:
     try:
         latest_timestamp = mongodb_handler.get_latest_timestamp(
             db_name=DB_NAME,
-            collection_name=security_name
+            collection_name=collection_name
         )
         return latest_timestamp.date() + datetime.timedelta(days=1)
     except IndexError:  # this is a brand new collection
@@ -77,7 +77,7 @@ def get_next_month(date: datetime.date) -> datetime.date:
         return datetime.date(date.year+1, 1, 1)
 
 
-def iter_monthly(security_name: str, security_code: str, metadata: dict, date_tgt: datetime.date):
+def iter_monthly(collection_name: str, security_code: str, metadata: dict, date_tgt: datetime.date):
     while date_tgt <= DATE_TODAY:
         try:
             security_prices = security_crawler.fetch_monthly_prices(
@@ -90,7 +90,7 @@ def iter_monthly(security_name: str, security_code: str, metadata: dict, date_tg
         docs = convert_dataframe_to_timeseries(security_prices, metadata)
         mongodb_handler.connect_and_insert_timeseries(
             db_name=DB_NAME,
-            collection_name=security_name,
+            collection_name=collection_name,
             docs=docs
         )
         date_tgt = get_next_month(date_tgt)
@@ -108,10 +108,10 @@ def main():
     for idx, security in securities.iterrows():
         security_name = security['有價證券名稱']
         security_code = security['有價證券代號']
+        collection_name = f'{security_name} ({security_code})'
         metadata = security.to_dict()
-        date_tgt = get_start_date(security_name, security_code)
-        iter_monthly(security_name, security_code, metadata, date_tgt)
-    logger.info('Done!')
+        date_tgt = get_start_date(collection_name, security_code)
+        iter_monthly(collection_name, security_code, metadata, date_tgt)
 
 
 if __name__ == '__main__':
