@@ -83,7 +83,7 @@ def iter_monthly(collection_name: str, security_code: str, date_tgt: datetime.da
                 date_tgt=date_tgt
             )
         except Exception as e:
-            logger.warning(e)
+            logger.warning(e, exc_info=True)
             break
         docs = convert_dataframe_to_timeseries(collection_name, security_prices)
         mongodb_handler.connect_and_insert_timeseries(
