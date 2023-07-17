@@ -42,10 +42,10 @@ def convert_dataframe_to_timeseries(collection_name: str, df: pandas.DataFrame) 
                 'traded_value': int(row['成交金額'].replace(',', '')),
             }
         except ValueError:
+            doc_num = mongodb_handler.count_documents(DB_NAME, collection_name)
+            if doc_num == 0:
+                continue
             if idx == 0:
-                doc_num = mongodb_handler.count_documents(DB_NAME, collection_name)
-                if doc_num == 0:
-                    continue
                 pre_date = mongodb_handler.get_latest_timestamp(DB_NAME, collection_name)
                 pre_doc = mongodb_handler.get_daily_doc(DB_NAME, collection_name, pre_date)
             else:
