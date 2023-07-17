@@ -151,6 +151,14 @@ def get_daily_doc(db_name: str, collection_name: str, datetime: datetime.datetim
     return doc
 
 
+def count_documents(db_name: str, collection_name: str) -> int:
+    collection = get_timeseries_collection(
+        db_name=db_name,
+        collection_name=collection_name,
+    )
+    return collection.count_documents({})
+
+
 if __name__ == '__main__':
     general_docs = [
         {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
