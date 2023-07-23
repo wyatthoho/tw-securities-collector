@@ -23,7 +23,7 @@ def get_config_url() -> str:
     return config['mongodb']['url']
 
 
-def connect_database(url: str, db_name: str) -> Tuple[MongoClient, Database]:
+def connect_initial(db_name: str, url: str = get_config_url()) -> Tuple[MongoClient, Database]:
     client = MongoClient(
         host=url,
         tls=True,
@@ -54,7 +54,7 @@ def generate_queries(docs: List[Dict], with_metadata: bool) -> List[Dict]:
     return queries
 
 
-def update_documents(collection: Collection, docs: List[Dict], with_metadata: bool):
+def update_collection(collection: Collection, docs: List[Dict], with_metadata: bool):
     logger.info(f'Updating {collection.name}..')
     queries = generate_queries(docs, with_metadata)
     for query, doc in zip(queries, docs):
@@ -113,11 +113,10 @@ if __name__ == '__main__':
             'body temperature': 36.8
         },
     ]
-    client, db = connect_database(
-        url=get_config_url(),
+    client, db = connect_initial(
         db_name='test_db'
     )
-    update_documents(
+    update_collection(
         collection=db['kitchen_collection'],
         docs=general_docs,
         with_metadata=False
@@ -126,7 +125,7 @@ if __name__ == '__main__':
         db=db,
         collection_name='patient_condition',
     )
-    update_documents(
+    update_collection(
         collection=collection,
         docs=timeseries_docs,
         with_metadata=True
