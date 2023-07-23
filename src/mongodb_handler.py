@@ -2,7 +2,7 @@ import configparser
 import datetime
 import logging
 import logging.config
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from pymongo import MongoClient, DESCENDING
 from pymongo.collection import Collection
@@ -17,10 +17,20 @@ logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
 
-def read_config() -> str:
+def get_config_url() -> str:
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
     return config['mongodb']['url']
+
+
+def connect_database(url: str, db_name: str) -> Tuple[MongoClient, Database]:
+    client = MongoClient(
+        host=url,
+        tls=True,
+        tlsAllowInvalidCertificates=True
+    )
+    db = client[db_name]
+    return client, db
 
 
 def generate_queries(docs: List[Dict], with_metadata: bool) -> List[Dict]:
@@ -79,26 +89,10 @@ def count_documents(collection: Collection) -> int:
 
 
 if __name__ == '__main__':
-    URL = read_config()
-    DB_NAME = 'test_db'
-    client = MongoClient(
-        host=URL,
-        tls=True,
-        tlsAllowInvalidCertificates=True
-    )
-    db = client[DB_NAME]
-
     general_docs = [
         {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
         {'name': 'egg', 'price': 36, 'category': 'food'}
     ]
-
-    update_documents(
-        collection=db['kitchen_collection'],
-        docs=general_docs,
-        with_metadata=False
-    )
-
     timeseries_docs = [
         {
             'metadata': {'patient': 'wyatt', 'gender': 'male'},
@@ -119,25 +113,29 @@ if __name__ == '__main__':
             'body temperature': 36.8
         },
     ]
-
+    client, db = connect_database(
+        url=get_config_url(),
+        db_name='test_db'
+    )
+    update_documents(
+        collection=db['kitchen_collection'],
+        docs=general_docs,
+        with_metadata=False
+    )
     collection = get_timeseries_collection(
         db=db,
         collection_name='patient_condition',
     )
-
     update_documents(
         collection=collection,
         docs=timeseries_docs,
         with_metadata=True
     )
-
     latest_timestamp = get_latest_timestamp(
         collection=collection
     )
-
     doc = get_daily_document(
         collection=collection,
         datetime=datetime.datetime(2021, 5, 20)
     )
-
     client.close()
