@@ -46,8 +46,10 @@ def convert_dataframe_to_timeseries(collection_name: str, df: pandas.DataFrame) 
             if doc_num == 0:
                 continue
             if idx == 0:
-                pre_date = mongodb_handler.get_latest_timestamp(DB_NAME, collection_name)
-                pre_doc = mongodb_handler.get_daily_doc(DB_NAME, collection_name, pre_date)
+                pre_date = mongodb_handler.get_latest_timestamp(
+                    DB_NAME, collection_name)
+                pre_doc = mongodb_handler.get_daily_document(
+                    DB_NAME, collection_name, pre_date)
             else:
                 pre_doc = docs[idx-1]
             doc = pre_doc
@@ -88,7 +90,8 @@ def iter_monthly(collection_name: str, security_code: str, date_tgt: datetime.da
         except Exception as e:
             logger.warning(e, exc_info=True)
             break
-        docs = convert_dataframe_to_timeseries(collection_name, security_prices)
+        docs = convert_dataframe_to_timeseries(
+            collection_name, security_prices)
         mongodb_handler.connect_and_insert_timeseries(
             db_name=DB_NAME,
             collection_name=collection_name,

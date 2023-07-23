@@ -1,9 +1,8 @@
 import configparser
 import datetime
-import functools
 import logging
 import logging.config
-from typing import Dict, List, Protocol
+from typing import Dict, List
 
 from pymongo import MongoClient, DESCENDING
 from pymongo.collection import Collection
@@ -18,47 +17,10 @@ logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
 
-def read_config() -> Dict[str, str]:
+def read_config() -> str:
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
     return config['mongodb']['url']
-
-
-class OriginalFunc(Protocol):
-    def __call__(self, db: Database, collection_name: str) -> Collection:
-        ...
-
-
-class DecoratedFunc(Protocol):
-    def __call__(self, db_name: str, collection_name: str) -> None:
-        ...
-
-
-def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invalid_certificates: bool = True):
-    def decorator(func: OriginalFunc) -> DecoratedFunc:
-        @functools.wraps(func)
-        def wrapper(db_name: str, collection_name: str):
-            client = MongoClient(
-                url,
-                tls=tls,
-                tlsAllowInvalidCertificates=tls_allow_invalid_certificates
-            )
-            db = client[db_name]
-            return func(db, collection_name)
-        return wrapper
-    return decorator
-
-
-@connect_mongodb()
-def get_general_collection(db: Database, collection_name: str) -> Collection:
-    return db[collection_name]
-
-
-def close_client(func):
-    def wrapper(collection: Collection, docs: List[Dict], with_metadata: bool):
-        func(collection, docs, with_metadata)
-        collection.database.client.close()
-    return wrapper
 
 
 def generate_queries(docs: List[Dict], with_metadata: bool) -> List[Dict]:
@@ -82,8 +44,7 @@ def generate_queries(docs: List[Dict], with_metadata: bool) -> List[Dict]:
     return queries
 
 
-@close_client
-def insert_documents(collection: Collection, docs: List[Dict], with_metadata: bool):
+def update_documents(collection: Collection, docs: List[Dict], with_metadata: bool):
     logger.info(f'Updating {collection.name}..')
     queries = generate_queries(docs, with_metadata)
     for query, doc in zip(queries, docs):
@@ -91,15 +52,6 @@ def insert_documents(collection: Collection, docs: List[Dict], with_metadata: bo
             collection.insert_one(doc)
 
 
-def connect_and_insert_general(db_name: str, collection_name: str, docs: List[Dict]):
-    collection = get_general_collection(
-        db_name=db_name,
-        collection_name=collection_name,
-    )
-    insert_documents(collection, docs, False)
-
-
-@connect_mongodb()
 def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
@@ -113,50 +65,38 @@ def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
         return db.get_collection(collection_name)
 
 
-def connect_and_insert_timeseries(db_name: str, collection_name: str, docs: List[Dict], with_metadata: bool):
-    collection = get_timeseries_collection(
-        db_name=db_name,
-        collection_name=collection_name,
-    )
-    insert_documents(collection, docs, with_metadata)
-
-
-def get_latest_timestamp(db_name: str, collection_name: str) -> datetime.datetime:
-    collection = get_timeseries_collection(
-        db_name=db_name,
-        collection_name=collection_name,
-    )
+def get_latest_timestamp(collection: Collection) -> datetime.datetime:
     latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
     return latest_doc['timestamp']
 
 
-def get_daily_doc(db_name: str, collection_name: str, datetime: datetime.datetime):
-    collection = get_timeseries_collection(
-        db_name=db_name,
-        collection_name=collection_name,
-    )
-    doc = collection.find_one({'timestamp': datetime})
-    return doc
+def get_daily_document(collection: Collection, datetime: datetime.datetime):
+    return collection.find_one({'timestamp': datetime})
 
 
-def count_documents(db_name: str, collection_name: str) -> int:
-    collection = get_timeseries_collection(
-        db_name=db_name,
-        collection_name=collection_name,
-    )
+def count_documents(collection: Collection) -> int:
     return collection.count_documents({})
 
 
 if __name__ == '__main__':
+    URL = read_config()
+    DB_NAME = 'test_db'
+    client = MongoClient(
+        host=URL,
+        tls=True,
+        tlsAllowInvalidCertificates=True
+    )
+    db = client[DB_NAME]
+
     general_docs = [
         {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
         {'name': 'egg', 'price': 36, 'category': 'food'}
     ]
 
-    connect_and_insert_general(
-        db_name='test_db',
-        collection_name='kitchen_collection',
-        docs=general_docs
+    update_documents(
+        collection=db['kitchen_collection'],
+        docs=general_docs,
+        with_metadata=False
     )
 
     timeseries_docs = [
@@ -180,20 +120,24 @@ if __name__ == '__main__':
         },
     ]
 
-    connect_and_insert_timeseries(
-        db_name='test_db',
+    collection = get_timeseries_collection(
+        db=db,
         collection_name='patient_condition',
+    )
+
+    update_documents(
+        collection=collection,
         docs=timeseries_docs,
-        with_metadata=False
+        with_metadata=True
     )
 
     latest_timestamp = get_latest_timestamp(
-        db_name='test_db',
-        collection_name='patient_condition',
+        collection=collection
     )
 
-    doc = get_daily_doc(
-        db_name='test_db',
-        collection_name='patient_condition',
+    doc = get_daily_document(
+        collection=collection,
         datetime=datetime.datetime(2021, 5, 20)
     )
+
+    client.close()
