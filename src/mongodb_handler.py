@@ -34,14 +34,6 @@ class DecoratedFunc(Protocol):
         ...
 
 
-def get_database(client: MongoClient, db_name: str) -> Database:
-    db_names = client.list_database_names()
-    if db_name not in db_names:
-        return Database(client, db_name)
-    else:
-        return client.get_database(db_name)
-
-
 def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invalid_certificates: bool = True):
     def decorator(func: OriginalFunc) -> DecoratedFunc:
         @functools.wraps(func)
@@ -51,7 +43,7 @@ def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invali
                 tls=tls,
                 tlsAllowInvalidCertificates=tls_allow_invalid_certificates
             )
-            db = get_database(client, db_name)
+            db = client[db_name]
             return func(db, collection_name)
         return wrapper
     return decorator
@@ -59,11 +51,7 @@ def connect_mongodb(url: str = read_config(), tls: bool = True, tls_allow_invali
 
 @connect_mongodb()
 def get_general_collection(db: Database, collection_name: str) -> Collection:
-    collection_names = db.list_collection_names()
-    if collection_name not in collection_names:
-        return db.create_collection(collection_name)
-    else:
-        return db.get_collection(collection_name)
+    return db[collection_name]
 
 
 def close_client(func):
