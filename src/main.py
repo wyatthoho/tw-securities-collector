@@ -3,6 +3,7 @@ import json
 import logging
 import logging.config
 import os
+import time
 from typing import Dict, List
 
 import pandas
@@ -89,7 +90,9 @@ def get_next_month(date: datetime.date) -> datetime.date:
 
 
 def iter_monthly(collection: Collection, security_code: str, date_tgt: datetime.date):
+    t_inc_min = config['main']['min_time_inc']
     while date_tgt <= DATE_TODAY:
+        t1 = time.time()
         try:
             security_prices = security_crawler.fetch_monthly_prices(
                 security_code=security_code,
@@ -106,6 +109,10 @@ def iter_monthly(collection: Collection, security_code: str, date_tgt: datetime.
             with_metadata=False
         )
         date_tgt = get_next_month(date_tgt)
+        
+        t_inc = time.time() - t1
+        if t_inc < t_inc_min:
+            time.sleep(t_inc_min - t_inc)
 
 
 def main():

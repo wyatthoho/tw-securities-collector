@@ -42,6 +42,7 @@
         "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
     },
     "main": {
-        "db_name": "taiwan_securities"
+        "db_name": "taiwan_securities",
+        "min_time_inc": 5
     }
 }
