@@ -1,17 +1,25 @@
 import datetime
+import json
 import logging
 import logging.config
+import os
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup, ResultSet
 
-from logging_config import LOGGING_CONFIG
 
-USER_AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
+this_dir = os.path.dirname(__file__)
+config_path = os.path.join(this_dir, 'config.json')
+with open(config_path, 'r') as f:
+    config = json.load(f)
 
-logging.config.dictConfig(LOGGING_CONFIG)
+
+logging.config.dictConfig(config['logging'])
 logger = logging.getLogger(__name__)
+
+
+USER_AGENT = config['crawler']['user_agent']
 
 
 def security_filter(data: dict) -> bool:

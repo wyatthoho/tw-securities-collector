@@ -1,29 +1,26 @@
-import configparser
 import datetime
+import json
 import logging
 import logging.config
+import os
 from typing import Dict, List, Tuple
 
 from pymongo import MongoClient, DESCENDING
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from logging_config import LOGGING_CONFIG
+
+this_dir = os.path.dirname(__file__)
+config_path = os.path.join(this_dir, 'config.json')
+with open(config_path, 'r') as f:
+    config = json.load(f)
 
 
-CONFIG_FILE = './src/config.ini'
-
-logging.config.dictConfig(LOGGING_CONFIG)
+logging.config.dictConfig(config['logging'])
 logger = logging.getLogger(__name__)
 
 
-def get_config_url() -> str:
-    config = configparser.ConfigParser()
-    config.read(CONFIG_FILE)
-    return config['mongodb']['url']
-
-
-def connect_initial(db_name: str, url: str = get_config_url()) -> Tuple[MongoClient, Database]:
+def connect_initial(db_name: str, url: str = config['mongodb']['url']) -> Tuple[MongoClient, Database]:
     client = MongoClient(
         host=url,
         tls=True,

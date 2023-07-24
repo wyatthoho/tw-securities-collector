@@ -1,6 +1,8 @@
 import datetime
+import json
 import logging
 import logging.config
+import os
 from typing import Dict, List
 
 import pandas
@@ -8,15 +10,21 @@ from pymongo.collection import Collection
 
 import mongodb_handler
 import security_crawler
-from logging_config import LOGGING_CONFIG
 
 
-DB_NAME = 'taiwan_securities'
+this_dir = os.path.dirname(__file__)
+config_path = os.path.join(this_dir, 'config.json')
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+
+logging.config.dictConfig(config['logging'])
+logger = logging.getLogger(__name__)
+
+
+DB_NAME = config['main']['db_name']
 DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
-
-logging.config.dictConfig(LOGGING_CONFIG)
-logger = logging.getLogger()
 
 
 def convert_dataframe_to_documents(df: pandas.DataFrame) -> List[Dict]:

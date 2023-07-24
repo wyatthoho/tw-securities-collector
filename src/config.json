@@ -1,0 +1,47 @@
+{
+    "logging": {
+        "version": 1,
+        "disable_existing_loggers": false,
+        "formatters": {
+            "standard": {
+                "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S"
+            }
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "level": "DEBUG",
+                "formatter": "standard",
+                "stream": "ext://sys.stdout"
+            },
+            "file": {
+                "class": "logging.FileHandler",
+                "level": "DEBUG",
+                "formatter": "standard",
+                "filename": "info.log",
+                "mode": "w",
+                "encoding": "UTF-8"
+            }
+        },
+        "loggers": {
+            "": {
+                "handlers": ["console", "file"],
+                "level": "DEBUG",
+                "propagate": false
+            },
+            "urllib3": {
+                "propagate": false
+            }
+        }
+    },
+    "mongodb": {
+        "url": "mongodb+srv://wyatt:wyatt@cluster0.gshfzug.mongodb.net/?retryWrites=true&w=majority"
+    },
+    "crawler": {
+        "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
+    },
+    "main": {
+        "db_name": "taiwan_securities"
+    }
+}
