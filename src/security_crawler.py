@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup, ResultSet
 
 this_dir = os.path.dirname(__file__)
 config_path = os.path.join(this_dir, 'config.json')
-with open(config_path, 'r') as f:
+with open(config_path, 'r', encoding='utf-8') as f:
     config = json.load(f)
 
 
@@ -37,7 +37,7 @@ def collect_securities(columns: list, rows: ResultSet):
         data_cleaned = {
             column: content
             for column, content in zip(columns, data_dirty)
-            if column
+            if column not in config['crawler']['columns_skip']
         }
         if security_filter(data_cleaned):
             df_data = pd.DataFrame([data_cleaned])

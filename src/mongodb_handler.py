@@ -12,7 +12,7 @@ from pymongo.database import Database
 
 this_dir = os.path.dirname(__file__)
 config_path = os.path.join(this_dir, 'config.json')
-with open(config_path, 'r') as f:
+with open(config_path, 'r', encoding='utf-8') as f:
     config = json.load(f)
 
 

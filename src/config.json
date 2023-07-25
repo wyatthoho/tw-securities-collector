@@ -39,7 +39,8 @@
         "url": "mongodb+srv://wyatt:wyatt@cluster0.gshfzug.mongodb.net/?retryWrites=true&w=majority"
     },
     "crawler": {
-        "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
+        "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36",
+        "columns_skip": ["", "頁面編號"]
     },
     "main": {
         "db_name": "taiwan_securities",
