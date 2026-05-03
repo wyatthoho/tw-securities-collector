@@ -1,126 +1,149 @@
 import datetime
 import logging
-from typing import Dict, List, Tuple
+import os
+import sys
+from typing import Any, Optional, Mapping
 
+from dotenv import load_dotenv
 from pymongo import MongoClient, DESCENDING
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-
-MONGODB_URL = 'mongodb+srv://wyatt:wyatt@cluster0.gshfzug.mongodb.net/?retryWrites=true&w=majority'
-
-
+# Load environment variables
+load_dotenv()
+MONGODB_URL = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
 logger = logging.getLogger(__name__)
 
 
-def connect_initial(db_name: str, url: str = MONGODB_URL) -> Tuple[MongoClient, Database]:
-    client = MongoClient(
-        host=url,
-        tls=True,
-        tlsAllowInvalidCertificates=True
-    )
-    db = client[db_name]
-    return client, db
+def connect_initial(
+    db_name: str, url: str = MONGODB_URL
+) -> tuple[MongoClient[dict[str, Any]], Database[dict[str, Any]]]:
+    """
+    Establishes the initial connection to MongoDB with modernized type hints.
+    """
+    logger.info(f"Initiating MongoDB connection to database: '{db_name}'")
+
+    try:
+        # MongoClient is generic; we hint that it handles dictionaries[cite: 1]
+        client: MongoClient[dict[str, Any]] = MongoClient(
+            host=url, tls=True, tlsAllowInvalidCertificates=True
+        )
+
+        # Clean logging: show cluster nodes without dumping the whole object
+        nodes = client.nodes or url.split("@")[-1].split("/")[0]
+        logger.info(f"Successfully created MongoClient (Cluster nodes: {nodes})")
+
+        db = client.get_database(db_name)
+        logger.info(f"Connected to database instance: '{db.name}'")
+
+        return client, db
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        raise
 
 
-def generate_queries(docs: List[Dict], with_metadata: bool) -> List[Dict]:
-    '''
-    If it is a collection of time series, each document has a subdocument
-    called `metadata`. Using the `find_one` method to query any document
-    might fail because the order of keys in the subdocument is important.
-    Therefore, an alternative approach is used where each field is matched
-    individually to query the subdocument.
-    '''
+def generate_queries(
+    docs: list[dict[str, Any]], with_metadata: bool
+) -> list[dict[str, Any]]:
+    """
+    Generates queries for time-series documents by matching metadata fields individually.[cite: 1]
+    """
     if with_metadata:
-        queries = []
+        queries: list[dict[str, Any]] = []
         for doc in docs:
             query = doc.copy()
-            for key, val in doc['metadata'].items():
-                query[f'metadata.{key}'] = val
-            del query['metadata']
+            # Safety check for metadata existence[cite: 1]
+            metadata = doc.get("metadata", {})
+            for key, val in metadata.items():
+                query[f"metadata.{key}"] = val
+
+            if "metadata" in query:
+                del query["metadata"]
             queries.append(query)
     else:
         queries = docs
     return queries
 
 
-def update_collection(collection: Collection, docs: List[Dict], with_metadata: bool):
-    logger.info(f'Updating {collection.name}..')
+def update_collection(
+    collection: Collection[dict[str, Any]],
+    docs: list[dict[str, Any]],
+    with_metadata: bool,
+) -> None:
+    """
+    Updates a collection by inserting documents if they do not already exist.[cite: 1]
+    """
+    logger.info(f"Updating {collection.name}...")
     queries = generate_queries(docs, with_metadata)
+
     for query, doc in zip(queries, docs):
+        # find_one returns Optional[dict], which is handled by the 'if not' check[cite: 1]
         if not collection.find_one(query):
             collection.insert_one(doc)
 
 
-def get_timeseries_collection(db: Database, collection_name: str) -> Collection:
+def get_timeseries_collection(
+    db: Database[dict[str, Any]], collection_name: str
+) -> Collection[dict[str, Any]]:
+    """
+    Ensures a time-series collection exists or creates it with default parameters.[cite: 1]
+    """
     collection_names = db.list_collection_names()
     if collection_name not in collection_names:
-        timeseries = {
-            'timeField': 'timestamp',
-            'metaField': 'metadata',
-            'granularity': 'hours'
+        # Mapping is used for read-only configuration dictionaries[cite: 1]
+        timeseries: Mapping[str, Any] = {
+            "timeField": "timestamp",
+            "metaField": "metadata",
+            "granularity": "hours",
         }
         return db.create_collection(collection_name, timeseries=timeseries)
     else:
         return db.get_collection(collection_name)
 
 
-def get_latest_timestamp(collection: Collection) -> datetime.datetime:
-    latest_doc = collection.find().sort('timestamp', DESCENDING)[0]
-    return latest_doc['timestamp']
+def get_latest_timestamp(
+    collection: Collection[dict[str, Any]],
+) -> Optional[datetime.datetime]:
+    """
+    Retrieves the most recent timestamp. Returns None if collection is empty.[cite: 1]
+    """
+    try:
+        # Sort and limit to 1 for efficiency[cite: 1]
+        latest_doc = collection.find().sort("timestamp", DESCENDING).limit(1)
+        doc = next(latest_doc, None)
+        return doc["timestamp"] if doc else None
+    except (StopIteration, KeyError):
+        return None
 
 
-def get_daily_document(collection: Collection, datetime: datetime.datetime):
-    return collection.find_one({'timestamp': datetime})
+def get_daily_document(
+    collection: Collection[dict[str, Any]], dt: datetime.datetime
+) -> Optional[dict[str, Any]]:
+    """
+    Finds a document matching a specific timestamp.[cite: 1]
+    """
+    return collection.find_one({"timestamp": dt})
 
 
-def count_documents(collection: Collection) -> int:
+def count_documents(collection: Collection[dict[str, Any]]) -> int:
+    """
+    Returns total document count in collection.[cite: 1]
+    """
     return collection.count_documents({})
 
 
-if __name__ == '__main__':
-    general_docs = [
-        {'name': 'blender', 'price': 340, 'category': 'kitchen appliance'},
-        {'name': 'egg', 'price': 36, 'category': 'food'}
-    ]
-    timeseries_docs = [
-        {
-            'metadata': {'patient': 'wyatt', 'gender': 'male'},
-            'timestamp': datetime.datetime(2021, 5, 18),
-            'weight': 70.1,
-            'body temperature': 37.4
-        },
-        {
-            'metadata': {'patient': 'wyatt', 'gender': 'male'},
-            'timestamp': datetime.datetime(2021, 5, 19),
-            'weight': 70.6,
-            'body temperature': 37.0
-        },
-        {
-            'metadata': {'patient': 'wyatt', 'gender': 'male'},
-            'timestamp': datetime.datetime(2021, 5, 20),
-            'weight': 70.2,
-            'body temperature': 36.8
-        },
-    ]
-    client, db = connect_initial(db_name='test_db')
-    update_collection(
-        collection=db['kitchen_collection'],
-        docs=general_docs,
-        with_metadata=False
+if __name__ == "__main__":
+    # Standard logging configuration for script execution[cite: 1]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
     )
-    collection = get_timeseries_collection(
-        db=db,
-        collection_name='patient_condition',
-    )
-    update_collection(
-        collection=collection,
-        docs=timeseries_docs,
-        with_metadata=True
-    )
-    latest_timestamp = get_latest_timestamp(collection=collection)
-    doc = get_daily_document(
-        collection=collection,
-        datetime=datetime.datetime(2021, 5, 20)
-    )
+
+    # Example usage
+    client, db = connect_initial(db_name="test_db")
+
+    # Close connection when finished
     client.close()
+    logger.info("Connection closed.")
