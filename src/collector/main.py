@@ -1,31 +1,60 @@
 import datetime
-import json
 import logging
 import logging.config
-import os
 import time
 from typing import Dict, List
 
 import pandas
 from pymongo.collection import Collection
 
-import mongodb_handler
-import security_crawler
+import collector.mongodb_handler as mongodb_handler
+import collector.security_crawler as security_crawler
 
 
-this_dir = os.path.dirname(__file__)
-config_path = os.path.join(this_dir, 'config.json')
-with open(config_path, 'r', encoding='utf-8') as f:
-    config = json.load(f)
-
-
-logging.config.dictConfig(config['logging'])
-logger = logging.getLogger(__name__)
-
-
-DB_NAME = config['main']['db_name']
+LOG_FILE = 'info.log'
+DB_NAME = 'taiwan_securities'
 DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
+MIN_TIME_INC = 5
+
+
+logging.config.dictConfig({
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'DEBUG',
+            'formatter': 'standard',
+            'stream': 'ext://sys.stdout',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'level': 'DEBUG',
+            'formatter': 'standard',
+            'filename': LOG_FILE,
+            'mode': 'w',
+            'encoding': 'UTF-8',
+        },
+    },
+    'loggers': {
+        '': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'urllib3': {
+            'propagate': False,
+        },
+    },
+})
+logger = logging.getLogger(__name__)
 
 
 def convert_dataframe_to_documents(df: pandas.DataFrame) -> List[Dict]:
@@ -56,10 +85,8 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, collection: Collection
             if doc_num == 0:
                 continue
             if idx == 0:
-                pre_date = mongodb_handler.get_latest_timestamp(
-                    collection)
-                pre_doc = mongodb_handler.get_daily_document(
-                    collection, pre_date)
+                pre_date = mongodb_handler.get_latest_timestamp(collection)
+                pre_doc = mongodb_handler.get_daily_document(collection, pre_date)
             else:
                 pre_doc = docs[idx-1]
             doc = pre_doc
@@ -73,9 +100,7 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, collection: Collection
 
 def get_start_date(collection: Collection, security_code: str) -> datetime.date:
     try:
-        latest_timestamp = mongodb_handler.get_latest_timestamp(
-            collection=collection
-        )
+        latest_timestamp = mongodb_handler.get_latest_timestamp(collection=collection)
         return latest_timestamp.date() + datetime.timedelta(days=1)
     except IndexError:  # this is a brand new collection
         date_listed = security_crawler.search_listed_date(security_code)
@@ -90,7 +115,6 @@ def get_next_month(date: datetime.date) -> datetime.date:
 
 
 def iter_monthly(collection: Collection, security_code: str, date_tgt: datetime.date):
-    t_inc_min = config['main']['min_time_inc']
     while date_tgt <= DATE_TODAY:
         t1 = time.time()
         try:
@@ -101,18 +125,17 @@ def iter_monthly(collection: Collection, security_code: str, date_tgt: datetime.
         except Exception as e:
             logger.warning(e, exc_info=True)
             break
-        docs = convert_dataframe_to_timeseries(
-            security_prices, collection)
+        docs = convert_dataframe_to_timeseries(security_prices, collection)
         mongodb_handler.update_collection(
             collection=collection,
             docs=docs,
             with_metadata=False
         )
         date_tgt = get_next_month(date_tgt)
-        
+
         t_inc = time.time() - t1
-        if t_inc < t_inc_min:
-            time.sleep(t_inc_min - t_inc)
+        if t_inc < MIN_TIME_INC:
+            time.sleep(MIN_TIME_INC - t_inc)
 
 
 def main():
@@ -131,8 +154,7 @@ def main():
         security_name = security['有價證券名稱']
         security_code = security['有價證券代號']
         collection_name = f'{security_name} ({security_code})'
-        collection = mongodb_handler.get_timeseries_collection(
-            db, collection_name)
+        collection = mongodb_handler.get_timeseries_collection(db, collection_name)
         date_tgt = get_start_date(collection, security_code)
         iter_monthly(collection, security_code, date_tgt)
 

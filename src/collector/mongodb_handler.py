@@ -1,8 +1,6 @@
 import datetime
-import json
 import logging
 import logging.config
-import os
 from typing import Dict, List, Tuple
 
 from pymongo import MongoClient, DESCENDING
@@ -10,17 +8,13 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 
 
-this_dir = os.path.dirname(__file__)
-config_path = os.path.join(this_dir, 'config.json')
-with open(config_path, 'r', encoding='utf-8') as f:
-    config = json.load(f)
+MONGODB_URL = 'mongodb+srv://wyatt:wyatt@cluster0.gshfzug.mongodb.net/?retryWrites=true&w=majority'
 
 
-logging.config.dictConfig(config['logging'])
 logger = logging.getLogger(__name__)
 
 
-def connect_initial(db_name: str, url: str = config['mongodb']['url']) -> Tuple[MongoClient, Database]:
+def connect_initial(db_name: str, url: str = MONGODB_URL) -> Tuple[MongoClient, Database]:
     client = MongoClient(
         host=url,
         tls=True,
@@ -110,9 +104,7 @@ if __name__ == '__main__':
             'body temperature': 36.8
         },
     ]
-    client, db = connect_initial(
-        db_name='test_db'
-    )
+    client, db = connect_initial(db_name='test_db')
     update_collection(
         collection=db['kitchen_collection'],
         docs=general_docs,
@@ -127,9 +119,7 @@ if __name__ == '__main__':
         docs=timeseries_docs,
         with_metadata=True
     )
-    latest_timestamp = get_latest_timestamp(
-        collection=collection
-    )
+    latest_timestamp = get_latest_timestamp(collection=collection)
     doc = get_daily_document(
         collection=collection,
         datetime=datetime.datetime(2021, 5, 20)
