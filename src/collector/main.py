@@ -1,6 +1,6 @@
 import datetime
 import logging
-import logging.config
+import sys
 import time
 from typing import Dict, List
 
@@ -11,49 +11,18 @@ import collector.mongodb_handler as mongodb_handler
 import collector.security_crawler as security_crawler
 
 
-LOG_FILE = 'info.log'
 DB_NAME = 'taiwan_securities'
 DATE_TRACEABLE = datetime.date(2010, 1, 1)
 DATE_TODAY = datetime.date.today()
 MIN_TIME_INC = 5
 
 
-logging.config.dictConfig({
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'standard': {
-            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-            'datefmt': '%Y-%m-%d %H:%M:%S',
-        }
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'level': 'DEBUG',
-            'formatter': 'standard',
-            'stream': 'ext://sys.stdout',
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'level': 'DEBUG',
-            'formatter': 'standard',
-            'filename': LOG_FILE,
-            'mode': 'w',
-            'encoding': 'UTF-8',
-        },
-    },
-    'loggers': {
-        '': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-        'urllib3': {
-            'propagate': False,
-        },
-    },
-})
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    stream=sys.stdout,
+)
 logger = logging.getLogger(__name__)
 
 

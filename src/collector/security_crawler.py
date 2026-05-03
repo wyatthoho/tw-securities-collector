@@ -8,6 +8,11 @@ from bs4 import BeautifulSoup, ResultSet
 
 USER_AGENT = 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36'
 COLUMNS_SKIP = ['', '頁面編號']
+URL_SECURITY_TABLE = 'https://isin.twse.com.tw/isin/single_main.jsp?'
+URL_MONTHLY_PRICES = 'https://www.twse.com.tw/exchangeReport/STOCK_DAY'
+TABLE_CLASS = 'h4'
+MARKET_FILTER = ['上市']
+SECURITY_TYPE_FILTER = ['ETF', '股票']
 
 
 logger = logging.getLogger(__name__)
@@ -16,8 +21,8 @@ logger = logging.getLogger(__name__)
 def security_filter(data: dict) -> bool:
     cond1 = not data['有價證券代號'][-1].isalpha()
     cond2 = not data['有價證券代號'][0].isalpha()
-    cond3 = data['市場別'] in ['上市', ]
-    cond4 = data['有價證券別'] in ['ETF', '股票']
+    cond3 = data['市場別'] in MARKET_FILTER
+    cond4 = data['有價證券別'] in SECURITY_TYPE_FILTER
     return all([cond1, cond2, cond3, cond4])
 
 
@@ -41,13 +46,12 @@ def fetch_security_table() -> pd.DataFrame:
     Collect the table of securities from Taiwan Stock Exchange.
     '''
     logger.info('Fetching securities data from Taiwan Stock Exchange website..')
-    url = 'https://isin.twse.com.tw/isin/single_main.jsp?'
     headers = {'user-agent': USER_AGENT}
-    response = requests.get(url, headers=headers)
+    response = requests.get(URL_SECURITY_TABLE, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     logger.info('Cleaning and filtering data..')
-    table = soup.find('table', class_='h4')
+    table = soup.find('table', class_=TABLE_CLASS)
     first_row = table.find('tr')
     columns = first_row.text.split('\n')
     other_rows = first_row.find_next_siblings('tr')
@@ -55,10 +59,9 @@ def fetch_security_table() -> pd.DataFrame:
 
 
 def search_listed_date(security_code: str) -> datetime.date:
-    url = 'https://isin.twse.com.tw/isin/single_main.jsp?'
     payload = {'owncode': security_code, 'stockname': ''}
     headers = {'user-agent': USER_AGENT}
-    response = requests.get(url, params=payload, headers=headers)
+    response = requests.get(URL_SECURITY_TABLE, params=payload, headers=headers)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     td_all = soup.find_all('td')
@@ -75,14 +78,13 @@ def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.Data
     date_show = date_tgt.strftime('%Y-%m')
     logger.info(f'Collecting the prices of {security_code} in {date_show}..')
 
-    url = 'https://www.twse.com.tw/exchangeReport/STOCK_DAY'
     payload = {
         'response': 'json',
         'date': str(date_tgt).replace('-', ''),
         'stockNo': security_code
     }
     headers = {'user-agent': USER_AGENT}
-    response = requests.get(url, params=payload, headers=headers)
+    response = requests.get(URL_MONTHLY_PRICES, params=payload, headers=headers)
     content = eval(response.text)
     if content['stat'] != 'OK':
         raise Exception(f'Fetch failed for {date_tgt}')
