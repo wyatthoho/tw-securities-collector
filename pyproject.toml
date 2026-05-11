@@ -19,7 +19,7 @@ readme = "README.md"
 license = { file = "LICENSE" }
 
 [project.scripts]
-notifier = "collector.main:main"
+collector = "collector.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

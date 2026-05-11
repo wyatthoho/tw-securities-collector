@@ -1,17 +1,12 @@
 import datetime
 import logging
-import os
 import sys
 from typing import Any, Optional, Mapping
 
-from dotenv import load_dotenv
 from pymongo import MongoClient, DESCENDING
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-# Load environment variables
-load_dotenv()
-MONGODB_URL = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +95,12 @@ class CollectionHandler:
 
 
 if __name__ == "__main__":
+    import os
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    MONGODB_URL = os.environ.get("MONGODB_URL")
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

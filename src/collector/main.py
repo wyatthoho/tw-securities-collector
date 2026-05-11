@@ -1,14 +1,16 @@
 import datetime
 import logging
+import os
 import sys
 import time
 from typing import Dict, List
 
-import pandas
+import pandas as pd
+from dotenv import load_dotenv
 from pymongo.collection import Collection
 
-import collector.mongodb_handler as mongodb_handler
-import collector.security_crawler as security_crawler
+from collector import mongodb_handler as mongo
+from collector import security_crawler as crawl
 
 
 DB_NAME = 'taiwan_securities'
@@ -26,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def convert_dataframe_to_documents(df: pandas.DataFrame) -> List[Dict]:
+def convert_dataframe_to_documents(df: pd.DataFrame) -> List[Dict]:
     return [row.to_dict() for idx, row in df.iterrows()]
 
 
@@ -35,7 +37,7 @@ def convert_rocdate_to_utcdate(rocdate: str) -> datetime.datetime:
     return datetime.datetime(year+1911, month, day)
 
 
-def convert_dataframe_to_timeseries(df: pandas.DataFrame, collection: Collection) -> List[Dict]:
+def convert_dataframe_to_timeseries(df: pd.DataFrame, collection: Collection) -> List[Dict]:
     docs = []
     for idx, row in df.iterrows():
         try:
@@ -50,12 +52,12 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, collection: Collection
                 'traded_value': int(row['成交金額'].replace(',', '')),
             }
         except ValueError:
-            doc_num = mongodb_handler.count_documents(collection)
+            doc_num = mongo.count_documents(collection)
             if doc_num == 0:
                 continue
             if idx == 0:
-                pre_date = mongodb_handler.get_latest_timestamp(collection)
-                pre_doc = mongodb_handler.get_daily_document(collection, pre_date)
+                pre_date = mongo.get_latest_timestamp(collection)
+                pre_doc = mongo.get_daily_document(collection, pre_date)
             else:
                 pre_doc = docs[idx-1]
             doc = pre_doc
@@ -69,10 +71,10 @@ def convert_dataframe_to_timeseries(df: pandas.DataFrame, collection: Collection
 
 def get_start_date(collection: Collection, security_code: str) -> datetime.date:
     try:
-        latest_timestamp = mongodb_handler.get_latest_timestamp(collection=collection)
+        latest_timestamp = mongo.get_latest_timestamp(collection=collection)
         return latest_timestamp.date() + datetime.timedelta(days=1)
     except IndexError:  # this is a brand new collection
-        date_listed = security_crawler.search_listed_date(security_code)
+        date_listed = crawl.search_listed_date(security_code)
         return max(DATE_TRACEABLE, date_listed)
 
 
@@ -87,7 +89,7 @@ def iter_monthly(collection: Collection, security_code: str, date_tgt: datetime.
     while date_tgt <= DATE_TODAY:
         t1 = time.time()
         try:
-            security_prices = security_crawler.fetch_monthly_prices(
+            security_prices = crawl.fetch_monthly_prices(
                 security_code=security_code,
                 date_tgt=date_tgt
             )
@@ -95,7 +97,7 @@ def iter_monthly(collection: Collection, security_code: str, date_tgt: datetime.
             logger.warning(e, exc_info=True)
             break
         docs = convert_dataframe_to_timeseries(security_prices, collection)
-        mongodb_handler.update_collection(
+        mongo.update_collection(
             collection=collection,
             docs=docs,
             with_metadata=False
@@ -109,25 +111,30 @@ def iter_monthly(collection: Collection, security_code: str, date_tgt: datetime.
 
 def main():
     logger.info('Start!')
-    client, db = mongodb_handler.connect_initial(DB_NAME)
 
-    securities = security_crawler.fetch_security_table()
+    load_dotenv()
+    MONGODB_URL = os.environ.get("MONGODB_URL")
+
+    securities = crawl.fetch_security_table()
     docs = convert_dataframe_to_documents(securities)
-    mongodb_handler.update_collection(
-        collection=db['security_info'],
-        docs=docs,
-        with_metadata=False
+
+    collection = mongo.CollectionHandler(
+        url=MONGODB_URL, 
+        db_name="security_info", 
+        collection_name="listed"
     )
 
-    for idx, security in securities.iterrows():
-        security_name = security['有價證券名稱']
-        security_code = security['有價證券代號']
-        collection_name = f'{security_name} ({security_code})'
-        collection = mongodb_handler.get_timeseries_collection(db, collection_name)
-        date_tgt = get_start_date(collection, security_code)
-        iter_monthly(collection, security_code, date_tgt)
+    collection.upload_docs(docs)
 
-    client.close()
+    # for idx, security in securities.iterrows():
+    #     security_name = security['有價證券名稱']
+    #     security_code = security['有價證券代號']
+    #     collection_name = f'{security_name} ({security_code})'
+    #     collection = mongo.get_timeseries_collection(db, collection_name)
+    #     date_tgt = get_start_date(collection, security_code)
+    #     iter_monthly(collection, security_code, date_tgt)
+
+    collection.close()
     logger.info('Done!')
 
 
