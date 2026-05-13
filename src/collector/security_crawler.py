@@ -42,7 +42,7 @@ def collect_securities(columns: list[str], rows: ResultSet) -> pd.DataFrame:
     return df
 
 
-def fetch_security_table() -> pd.DataFrame:
+def fetch_listings() -> pd.DataFrame:
     """
     Collect the table of securities from Taiwan Stock Exchange.
     """
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
         stream=sys.stdout,
     )
-    securities = fetch_security_table()
+    securities = fetch_listings()
     date_listed = search_listed_date("00639")
     security_prices = fetch_monthly_prices(
         security_code="00639", date_tgt=datetime.date(2015, 12, 1)
