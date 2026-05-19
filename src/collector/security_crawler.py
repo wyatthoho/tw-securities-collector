@@ -75,14 +75,14 @@ def search_listed_date(security_code: str) -> datetime.date | None:
             return datetime.date(year, month, day)
 
 
-def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.DataFrame:
+def fetch_monthly_prices(code: str, date_tgt: datetime.date) -> pd.DataFrame:
     date_show = date_tgt.strftime("%Y-%m")
-    logger.info(f"Collecting the prices of {security_code} in {date_show}..")
+    logger.info(f"Collecting the prices of {code} in {date_show}..")
 
     payload = {
         "response": "json",
         "date": str(date_tgt).replace("-", ""),
-        "stockNo": security_code,
+        "stockNo": code,
     }
     headers = {"user-agent": USER_AGENT}
     response = requests.get(URL_MONTHLY_PRICES, params=payload, headers=headers)
@@ -90,7 +90,9 @@ def fetch_monthly_prices(security_code: str, date_tgt: datetime.date) -> pd.Data
     if content["stat"] != "OK":
         raise Exception(f"Fetch failed for {date_tgt}")
     else:
-        return pd.DataFrame(content["data"], columns=content["fields"])
+        df = pd.DataFrame(content["data"], columns=content["fields"])
+        df.insert(0, "code", code)
+        return df
 
 
 if __name__ == "__main__":
@@ -103,6 +105,6 @@ if __name__ == "__main__":
     securities = fetch_listings()
     date_listed = search_listed_date("00639")
     security_prices = fetch_monthly_prices(
-        security_code="00639", date_tgt=datetime.date(2015, 12, 1)
+        code="00639", date_tgt=datetime.date(2015, 12, 1)
     )
     logger.info(f"Prices collected:\n\n{security_prices}")
