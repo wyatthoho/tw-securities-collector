@@ -3,20 +3,44 @@ import os
 import sys
 import time
 from datetime import date, datetime
-from typing import Dict, List
+from typing import TypedDict
 
 import pandas as pd
 from dotenv import load_dotenv
 
-from collector import mongodb_handler as mongo
-from collector import security_crawler as crawl
+from collector.mongodb_handler import MongoHandler
+from collector.security_crawler import SecurityCrawler
+
+
+class ListingDoc(TypedDict):
+    有價證券代號: str
+    有價證券名稱: str
+    市場別: str
+    有價證券別: str
+    產業別: str
+    CFICode: str
+    備註: str
+
+
+class TimeseriesDoc(TypedDict):
+    code: str
+    opening_price: float
+    closing_price: float
+    lowest_price: float
+    highest_price: float
+    price_change: float
+    trade_count: int
+    trade_shares: int
+    trade_value: int
+    timestamp: datetime
+    note: str
 
 
 load_dotenv()
 MONGODB_URL = os.environ.get("MONGODB_URL")
 TRACEABLE_DATE = date(2010, 1, 4)
 TODAY = date.today()
-MIN_TIME_INC = 5
+MIN_CYCLE_SECONDS = 5
 
 
 logging.basicConfig(
@@ -28,70 +52,77 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def convert_dataframe_to_documents(df: pd.DataFrame) -> List[Dict]:
-    return [row.to_dict() for _, row in df.iterrows()]
+class DataFrameConverter:
+    def to_documents(self, df: pd.DataFrame) -> list[ListingDoc]:
+        return [row.to_dict() for _, row in df.iterrows()]
+
+    def to_timeseries(self, df: pd.DataFrame) -> list[TimeseriesDoc]:
+        docs = []
+        for _, row in df.iterrows():
+            docs.append(
+                {
+                    "code": row["code"],
+                    "opening_price": float(row["開盤價"]),
+                    "closing_price": float(row["收盤價"]),
+                    "lowest_price": float(row["最低價"]),
+                    "highest_price": float(row["最高價"]),
+                    "price_change": float(row["漲跌價差"]),
+                    "trade_count": self._parse_int(row["成交筆數"]),
+                    "trade_shares": self._parse_int(row["成交股數"]),
+                    "trade_value": self._parse_int(row["成交金額"]),
+                    "timestamp": self._roc_date_to_datetime(row["日期"]),
+                    "note": row["註記"],
+                }
+            )
+        return docs
+
+    @staticmethod
+    def _parse_int(value: str) -> int:
+        return int(value.replace(",", ""))
+
+    @staticmethod
+    def _roc_date_to_datetime(roc_date: str) -> datetime:
+        year, month, day = map(int, roc_date.split("/"))
+        return datetime(year + 1911, month, day)
 
 
-def convert_rocdate_to_utcdate(rocdate: str) -> datetime:
-    year, month, day = map(int, rocdate.split("/"))
-    return datetime(year + 1911, month, day)
-
-
-def convert_dataframe_to_timeseries(df: pd.DataFrame) -> List[Dict]:
-    docs = []
-    for _, row in df.iterrows():
-        doc = {
-            "code": row["code"],
-            "opening_price": float(row["開盤價"]),
-            "closing_price": float(row["收盤價"]),
-            "lowest_price": float(row["最低價"]),
-            "highest_price": float(row["最高價"]),
-            "price_change": float(row["漲跌價差"]),
-            "trade_count": int(row["成交筆數"].replace(",", "")),
-            "trade_shares": int(row["成交股數"].replace(",", "")),
-            "trade_value": int(row["成交金額"].replace(",", "")),
-            "timestamp": convert_rocdate_to_utcdate(row["日期"]),
-            "note": row["註記"],
-        }
-        docs.append(doc)
-    return docs
-
-
-def get_next_month(_date: date) -> date:
+def next_month(_date: date) -> date:
     if _date.month < 12:
         return date(_date.year, _date.month + 1, 1)
-    else:
-        return date(_date.year + 1, 1, 1)
+    return date(_date.year + 1, 1, 1)
+
+
+def throttle(elapsed: float) -> None:
+    remaining = MIN_CYCLE_SECONDS - elapsed
+    if remaining > 0:
+        time.sleep(remaining)
 
 
 def main():
     logger.info("Start!")
 
-    m_hdl = mongo.MongoHandler(url=MONGODB_URL)
+    mongo = MongoHandler(url=MONGODB_URL)
+    crawler = SecurityCrawler()
+    converter = DataFrameConverter()
 
-    listing_df = crawl.fetch_listings()
-    listing_docs = convert_dataframe_to_documents(listing_df)
-    m_hdl.upload_listings(listing_docs)
+    mongo.upload_listings(converter.to_documents(crawler.fetch_listings()))
 
-    for doc in m_hdl.cl_listings.find():
+    for doc in mongo.cl_listings.find():
         code = doc["有價證券代號"]
-        birth_date = m_hdl.get_birth_date(code)
-        record_date = m_hdl.get_record_date(code) or TRACEABLE_DATE
+        birth_date = mongo.get_birth_date(code)
+        record_date = mongo.get_record_date(code) or TRACEABLE_DATE
         start_date = max(birth_date, record_date, TRACEABLE_DATE)
 
         while start_date < TODAY:
-            t1 = time.time()
+            t0 = time.time()
 
-            prices = crawl.fetch_monthly_prices(code=code, date_tgt=start_date)
-            docs = convert_dataframe_to_timeseries(prices)
-            m_hdl.upload_daily(docs=docs)
+            prices = crawler.fetch_monthly_prices(code=code, date_tgt=start_date)
+            mongo.upload_daily(docs=converter.to_timeseries(prices))
 
-            start_date = get_next_month(start_date)
-            t_inc = time.time() - t1
-            if t_inc < MIN_TIME_INC:
-                time.sleep(MIN_TIME_INC - t_inc)
+            start_date = next_month(start_date)
+            throttle(elapsed=time.time() - t0)
 
-    m_hdl.close()
+    mongo.close()
     logger.info("Done!")
 
 
