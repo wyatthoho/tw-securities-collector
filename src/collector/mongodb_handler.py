@@ -44,7 +44,7 @@ class MongoHandler:
     def get_birth_date(self, code: str) -> datetime.date:
         doc = self.cl_listings.find_one({"有價證券代號": code})
         birth_date_str: str = doc["公開發行/上市(櫃)/發行日"]
-        return datetime.strptime(birth_date_str, "%Y/%m/%d").date()
+        return datetime.datetime.strptime(birth_date_str, "%Y/%m/%d").date()
 
     def get_record_date(self, code: str) -> datetime.date | None:
         result: dict[str, datetime.datetime] = self.cl_daily.find_one(
