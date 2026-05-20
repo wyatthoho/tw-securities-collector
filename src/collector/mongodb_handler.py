@@ -18,31 +18,28 @@ class MongoHandler:
         logger.info(f"Connected to MongoDB (nodes: {self.client.nodes})")
 
         self.db = self.client.get_database(DB_STOCK)
-        logger.info(f"Using database: '{self.db.name}'")
-
         self.cl_listings = self.db.get_collection(CL_LISTINGS)
-        logger.info(f"Using collection: '{self.cl_listings.name}'")
-
         self.cl_daily = self.db.get_collection(CL_DAILY)
-        logger.info(f"Using collection: '{self.cl_daily.name}'")
 
     def upload_listings(self, docs: list[dict]):
+        inserted_count = 0
         for doc in docs:
             queried = self.cl_listings.find_one(doc)
-            if queried:
-                logger.info(f"Document already exists. ID: {queried['_id']}")
-            else:
-                result = self.cl_listings.insert_one(doc)
-                logger.info(f"Document inserted. ID: {result.inserted_id}")
+            if not queried:
+                self.cl_listings.insert_one(doc)
+                inserted_count += 1
+        if inserted_count > 0:
+            logger.info(f"Uploaded {inserted_count} new security listings to MongoDB.")
 
     def upload_daily(self, docs: list[dict]):
+        inserted_count = 0
         for doc in docs:
             queried = self.cl_daily.find_one(doc)
-            if queried:
-                logger.info(f"Document already exists. ID: {queried['_id']}")
-            else:
-                result = self.cl_daily.insert_one(doc)
-                logger.info(f"Document inserted. ID: {result.inserted_id}")
+            if not queried:
+                self.cl_daily.insert_one(doc)
+                inserted_count += 1
+        if inserted_count > 0:
+            logger.info(f"Saved {inserted_count} new daily price records.")
 
     def get_birth_date(self, code: str) -> date:
         doc = self.cl_listings.find_one({"有價證券代號": code})

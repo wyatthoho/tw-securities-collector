@@ -51,11 +51,10 @@ class SecurityCrawler:
         return df
 
     def fetch_listings(self) -> pd.DataFrame:
-        logger.info("Fetching securities data from Taiwan Stock Exchange website..")
+        logger.info("Fetching security listings table from TWSE...")
         response = requests.get(URL_SECURITY_TABLE, headers=self._headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        logger.info("Cleaning and filtering data..")
         table = soup.find("table", class_=TABLE_CLASS)
         first_row = table.find("tr")
         columns = first_row.text.split("\n")
@@ -79,9 +78,6 @@ class SecurityCrawler:
                 return datetime.date(year, month, day)
 
     def fetch_monthly_prices(self, code: str, date_tgt: datetime.date) -> pd.DataFrame:
-        date_show = date_tgt.strftime("%Y-%m")
-        logger.info(f"Collecting the prices of {code} in {date_show}..")
-
         payload = {
             "response": "json",
             "date": str(date_tgt).replace("-", ""),
@@ -90,13 +86,13 @@ class SecurityCrawler:
         response = requests.get(
             URL_MONTHLY_PRICES, params=payload, headers=self._headers
         )
-        content = eval(response.text)
+        response.raise_for_status()
+        content = response.json()
         if content["stat"] != "OK":
             raise Exception(f"Fetch failed for {date_tgt}")
-        else:
-            df = pd.DataFrame(content["data"], columns=content["fields"])
-            df.insert(0, "code", code)
-            return df
+        df = pd.DataFrame(content["data"], columns=content["fields"])
+        df.insert(0, "code", code)
+        return df
 
 
 if __name__ == "__main__":
@@ -112,4 +108,4 @@ if __name__ == "__main__":
     security_prices = crawler.fetch_monthly_prices(
         code="00639", date_tgt=datetime.date(2015, 12, 1)
     )
-    logger.info(f"Prices collected:\n\n{security_prices}")
+    logger.info("Prices collected successfully.")

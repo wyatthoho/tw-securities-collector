@@ -12,7 +12,7 @@ from collector.mongodb_handler import MongoHandler
 from collector.security_crawler import SecurityCrawler
 
 
-class ListingDoc(TypedDict):
+class ListingDocument(TypedDict):
     有價證券代號: str
     有價證券名稱: str
     市場別: str
@@ -22,7 +22,7 @@ class ListingDoc(TypedDict):
     備註: str
 
 
-class TimeseriesDoc(TypedDict):
+class TimeseriesDocument(TypedDict):
     code: str
     opening_price: float
     closing_price: float
@@ -53,10 +53,10 @@ logger = logging.getLogger(__name__)
 
 
 class DataFrameConverter:
-    def to_documents(self, df: pd.DataFrame) -> list[ListingDoc]:
+    def to_documents(self, df: pd.DataFrame) -> list[ListingDocument]:
         return [row.to_dict() for _, row in df.iterrows()]
 
-    def to_timeseries(self, df: pd.DataFrame) -> list[TimeseriesDoc]:
+    def to_timeseries(self, df: pd.DataFrame) -> list[TimeseriesDocument]:
         docs = []
         for _, row in df.iterrows():
             docs.append(
@@ -99,31 +99,55 @@ def throttle(elapsed: float) -> None:
 
 
 def main():
-    logger.info("Start!")
+    logger.info("Initializing Taiwan stock crawling pipeline...")
 
     mongo = MongoHandler(url=MONGODB_URL)
     crawler = SecurityCrawler()
     converter = DataFrameConverter()
 
-    mongo.upload_listings(converter.to_documents(crawler.fetch_listings()))
+    # Fetch and sync listings
+    listings_df = crawler.fetch_listings()
+    listings_count = len(listings_df)
+    mongo.upload_listings(converter.to_documents(listings_df))
+    logger.info(f"Synchronized {listings_count} security listings.")
 
-    for doc in mongo.cl_listings.find():
+    for idx, doc in enumerate(mongo.cl_listings.find(), 1):
         code = doc["有價證券代號"]
         birth_date = mongo.get_birth_date(code)
         record_date = mongo.get_record_date(code) or TRACEABLE_DATE
         start_date = max(birth_date, record_date, TRACEABLE_DATE)
 
+        if start_date >= TODAY:
+            continue
+
+        logger.info(f"[{idx}/{listings_count}] Processing {code}")
+
         while start_date < TODAY:
             t0 = time.time()
+            date_str = start_date.strftime("%Y-%m")
 
-            prices = crawler.fetch_monthly_prices(code=code, date_tgt=start_date)
-            mongo.upload_daily(docs=converter.to_timeseries(prices))
+            try:
+                prices = crawler.fetch_monthly_prices(code=code, date_tgt=start_date)
 
-            start_date = next_month(start_date)
-            throttle(elapsed=time.time() - t0)
+                if not prices.empty:
+                    mongo.upload_daily(docs=converter.to_timeseries(prices))
+                else:
+                    logger.warning(f"No data returned for {code} in {date_str}")
+
+                start_date = next_month(start_date)
+
+            except Exception as e:
+                logger.error(f"Failed to fetch/save data for {code} in {date_str}: {e}")
+                logger.warning(
+                    f"Skipping remaining months for {code} due to previous error."
+                )
+                break
+
+            finally:
+                throttle(elapsed=time.time() - t0)
 
     mongo.close()
-    logger.info("Done!")
+    logger.info("Pipeline execution completed successfully.")
 
 
 if __name__ == "__main__":
