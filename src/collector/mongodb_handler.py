@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime
+import datetime
 
 from pymongo import MongoClient
 
@@ -41,18 +41,18 @@ class MongoHandler:
         if inserted_count > 0:
             logger.info(f"Saved {inserted_count} new daily price records.")
 
-    def get_birth_date(self, code: str) -> date:
+    def get_birth_date(self, code: str) -> datetime.date:
         doc = self.cl_listings.find_one({"有價證券代號": code})
         birth_date_str: str = doc["公開發行/上市(櫃)/發行日"]
         return datetime.strptime(birth_date_str, "%Y/%m/%d").date()
 
-    def get_record_date(self, code: str) -> date | None:
-        result = self.cl_daily.find_one(
+    def get_record_date(self, code: str) -> datetime.date | None:
+        result: dict[str, datetime.datetime] = self.cl_daily.find_one(
             {"code": code},
             sort=[("timestamp", -1)],
             projection={"timestamp": 1, "_id": 0},
         )
-        return result["timestamp"] if result else None
+        return result["timestamp"].date() if result else None
 
     def close(self):
         self.client.close()

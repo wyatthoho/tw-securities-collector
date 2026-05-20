@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date, datetime
+import datetime
 from typing import TypedDict
 
 import pandas as pd
@@ -38,8 +38,8 @@ class TimeseriesDocument(TypedDict):
 
 load_dotenv()
 MONGODB_URL = os.environ.get("MONGODB_URL")
-TRACEABLE_DATE = date(2010, 1, 4)
-TODAY = date.today()
+TRACEABLE_DATE = datetime.date(2010, 1, 4)
+TODAY = datetime.date.today()
 MIN_CYCLE_SECONDS = 5
 
 
@@ -86,10 +86,10 @@ class DataFrameConverter:
         return datetime(year + 1911, month, day)
 
 
-def next_month(_date: date) -> date:
+def next_month(_date: datetime.date) -> datetime.date:
     if _date.month < 12:
-        return date(_date.year, _date.month + 1, 1)
-    return date(_date.year + 1, 1, 1)
+        return datetime.date(_date.year, _date.month + 1, 1)
+    return datetime.date(_date.year + 1, 1, 1)
 
 
 def throttle(elapsed: float) -> None:
