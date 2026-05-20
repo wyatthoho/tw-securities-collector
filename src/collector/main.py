@@ -32,7 +32,7 @@ class TimeseriesDocument(TypedDict):
     trade_count: int
     trade_shares: int
     trade_value: int
-    timestamp: datetime
+    timestamp: datetime.datetime
     note: str
 
 
@@ -81,9 +81,9 @@ class DataFrameConverter:
         return int(value.replace(",", ""))
 
     @staticmethod
-    def _roc_date_to_datetime(roc_date: str) -> datetime:
+    def _roc_date_to_datetime(roc_date: str) -> datetime.datetime:
         year, month, day = map(int, roc_date.split("/"))
-        return datetime(year + 1911, month, day)
+        return datetime.datetime(year + 1911, month, day)
 
 
 def next_month(_date: datetime.date) -> datetime.date:
