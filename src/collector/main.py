@@ -66,7 +66,7 @@ class DataFrameConverter:
                     "closing_price": float(row["收盤價"]),
                     "lowest_price": float(row["最低價"]),
                     "highest_price": float(row["最高價"]),
-                    "price_change": float(row["漲跌價差"]),
+                    # "price_change": float(row["漲跌價差"]),  # closing_price_day1 - closing_price_day0, because of dividend
                     "trade_count": self._parse_int(row["成交筆數"]),
                     "trade_shares": self._parse_int(row["成交股數"]),
                     "trade_value": self._parse_int(row["成交金額"]),
@@ -131,6 +131,7 @@ def main():
 
                 if not prices.empty:
                     mongo.upload_daily(docs=converter.to_timeseries(prices))
+                    logger.info(f"Uploaded prices for {code} in {date_str}")
                 else:
                     logger.warning(f"No data returned for {code} in {date_str}")
 

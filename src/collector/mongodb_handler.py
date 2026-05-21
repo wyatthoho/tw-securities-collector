@@ -38,8 +38,6 @@ class MongoHandler:
             if not queried:
                 self.cl_daily.insert_one(doc)
                 inserted_count += 1
-        if inserted_count > 0:
-            logger.info(f"Saved {inserted_count} new daily price records.")
 
     def get_birth_date(self, code: str) -> datetime.date:
         doc = self.cl_listings.find_one({"有價證券代號": code})
