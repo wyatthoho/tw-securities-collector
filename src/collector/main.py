@@ -57,6 +57,17 @@ class DataFrameConverter:
         return [row.to_dict() for _, row in df.iterrows()]
 
     def to_timeseries(self, df: pd.DataFrame) -> list[TimeseriesDocument]:
+        """
+        Converts TWSE raw DataFrame into a list of TimeseriesDocuments.
+
+        Notes on excluded fields:
+        - '漲跌價差' (Price Change): Excluded due to non-numeric indicators (+, -, X).
+        'X' denotes ex-dividend/ex-rights days, which breaks direct numeric parsing.
+        Derive from 'closing_price' if historical changes are required.
+        - '註記' (Notes): Omitted because it is missing from certain TWSE API
+        responses, causing KeyErrors. It also holds low quantitative value
+        (used mainly for rare events like stock splits or par value changes).
+        """
         docs = []
         for _, row in df.iterrows():
             docs.append(
@@ -66,12 +77,12 @@ class DataFrameConverter:
                     "closing_price": float(row["收盤價"]),
                     "lowest_price": float(row["最低價"]),
                     "highest_price": float(row["最高價"]),
-                    # "price_change": float(row["漲跌價差"]),  # closing_price_day1 - closing_price_day0, because of dividend
+                    # "price_change": row["漲跌價差"],
                     "trade_count": self._parse_int(row["成交筆數"]),
                     "trade_shares": self._parse_int(row["成交股數"]),
                     "trade_value": self._parse_int(row["成交金額"]),
                     "timestamp": self._roc_date_to_datetime(row["日期"]),
-                    "note": row["註記"],
+                    # "note": row["註記"],
                 }
             )
         return docs
@@ -130,8 +141,13 @@ def main():
                 prices = crawler.fetch_monthly_prices(code=code, date_tgt=start_date)
 
                 if not prices.empty:
-                    mongo.upload_daily(docs=converter.to_timeseries(prices))
-                    logger.info(f"Uploaded prices for {code} in {date_str}")
+                    count = mongo.upload_daily(docs=converter.to_timeseries(prices))
+                    if count:
+                        logger.info(
+                            f"Uploaded {count} daily prices for {code} in {date_str}"
+                        )
+                    else:
+                        logger.info(f"No new daily prices for {code} in {date_str}")
                 else:
                     logger.warning(f"No data returned for {code} in {date_str}")
 
@@ -139,10 +155,7 @@ def main():
 
             except Exception as e:
                 logger.error(f"Failed to fetch/save data for {code} in {date_str}: {e}")
-                logger.warning(
-                    f"Skipping remaining months for {code} due to previous error."
-                )
-                break
+                sys.exit()
 
             finally:
                 throttle(elapsed=time.time() - t0)

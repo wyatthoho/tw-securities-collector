@@ -31,13 +31,14 @@ class MongoHandler:
         if inserted_count > 0:
             logger.info(f"Uploaded {inserted_count} new security listings to MongoDB.")
 
-    def upload_daily(self, docs: list[dict]):
+    def upload_daily(self, docs: list[dict]) -> int:
         inserted_count = 0
         for doc in docs:
             queried = self.cl_daily.find_one(doc)
             if not queried:
                 self.cl_daily.insert_one(doc)
                 inserted_count += 1
+        return inserted_count
 
     def get_birth_date(self, code: str) -> datetime.date:
         doc = self.cl_listings.find_one({"有價證券代號": code})

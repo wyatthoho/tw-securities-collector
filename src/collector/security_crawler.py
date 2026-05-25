@@ -9,8 +9,8 @@ from bs4 import BeautifulSoup, ResultSet
 
 USER_AGENT = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
 COLUMNS_SKIP = ["", "頁面編號"]
-URL_SECURITY_TABLE = "https://isin.twse.com.tw/isin/single_main.jsp?"
-URL_MONTHLY_PRICES = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+URL_LISTINGS = "https://isin.twse.com.tw/isin/single_main.jsp?"
+URL_PRICES = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TABLE_CLASS = "h4"
 MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
@@ -52,7 +52,7 @@ class SecurityCrawler:
 
     def fetch_listings(self) -> pd.DataFrame:
         logger.info("Fetching security listings table from TWSE...")
-        response = requests.get(URL_SECURITY_TABLE, headers=self._headers)
+        response = requests.get(URL_LISTINGS, headers=self._headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
         table = soup.find("table", class_=TABLE_CLASS)
@@ -63,9 +63,7 @@ class SecurityCrawler:
 
     def search_listed_date(self, code: str) -> datetime.date | None:
         payload = {"owncode": code, "stockname": ""}
-        response = requests.get(
-            URL_SECURITY_TABLE, params=payload, headers=self._headers
-        )
+        response = requests.get(URL_LISTINGS, params=payload, headers=self._headers)
         soup = BeautifulSoup(response.text, "html.parser")
 
         td_all = soup.find_all("td")
@@ -83,13 +81,13 @@ class SecurityCrawler:
             "date": str(date_tgt).replace("-", ""),
             "stockNo": code,
         }
-        response = requests.get(
-            URL_MONTHLY_PRICES, params=payload, headers=self._headers
-        )
+        response = requests.get(URL_PRICES, params=payload, headers=self._headers)
         response.raise_for_status()
         content = response.json()
+
         if content["stat"] != "OK":
-            raise Exception(f"Fetch failed for {date_tgt}")
+            raise Exception(f"API stat={content['stat']}")
+
         df = pd.DataFrame(content["data"], columns=content["fields"])
         df.insert(0, "code", code)
         return df
