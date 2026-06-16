@@ -31,7 +31,7 @@ class MongoHandler:
         if inserted_count > 0:
             logger.info(f"Uploaded {inserted_count} new security listings to MongoDB.")
 
-    def upload_daily(self, docs: list[dict]) -> int:
+    def insert_absent_docs(self, docs: list[dict]) -> int:
         inserted_count = 0
         for doc in docs:
             queried = self.cl_daily.find_one(doc)

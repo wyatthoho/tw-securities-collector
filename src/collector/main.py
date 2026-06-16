@@ -141,7 +141,7 @@ def main():
                 prices = crawler.fetch_monthly_prices(code=code, date_tgt=start_date)
 
                 if not prices.empty:
-                    count = mongo.upload_daily(docs=converter.to_timeseries(prices))
+                    count = mongo.insert_absent_docs(converter.to_timeseries(prices))
                     if count:
                         logger.info(
                             f"Uploaded {count} daily prices for {code} in {date_str}"
