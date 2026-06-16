@@ -1,6 +1,7 @@
 import datetime
 import logging
 import sys
+import time
 
 import pandas as pd
 import requests
@@ -14,6 +15,7 @@ URL_PRICES = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TABLE_CLASS = "h4"
 MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
+FETCH_RETRY_BACKOFF = [120, 240, 480, 720, 960]
 
 
 logger = logging.getLogger(__name__)
@@ -81,16 +83,26 @@ class SecurityCrawler:
             "date": str(date_tgt).replace("-", ""),
             "stockNo": code,
         }
-        response = requests.get(URL_PRICES, params=payload, headers=self._headers)
-        response.raise_for_status()
-        content = response.json()
 
-        if content["stat"] != "OK":
-            raise Exception(f"API stat={content['stat']}")
+        for backoff in FETCH_RETRY_BACKOFF:
+            session = requests.Session()
+            try:
+                # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
+                response = session.get(URL_PRICES, params=payload, headers=self._headers)
+                response.raise_for_status()
+                content = response.json()
+            finally:
+                session.close()
 
-        df = pd.DataFrame(content["data"], columns=content["fields"])
-        df.insert(0, "code", code)
-        return df
+            if content["stat"] == "OK":
+                df = pd.DataFrame(content["data"], columns=content["fields"])
+                df.insert(0, "code", code)
+                return df
+
+            logger.warning(f"{content}")
+            time.sleep(backoff)
+
+        raise Exception(f"Exhausted retries for {code} {date_tgt.strftime('%Y-%m')}")
 
 
 if __name__ == "__main__":

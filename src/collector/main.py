@@ -77,12 +77,12 @@ class DataFrameConverter:
                     "closing_price": float(row["收盤價"]),
                     "lowest_price": float(row["最低價"]),
                     "highest_price": float(row["最高價"]),
-                    # "price_change": row["漲跌價差"],
+                    "price_change": row["漲跌價差"],
                     "trade_count": self._parse_int(row["成交筆數"]),
                     "trade_shares": self._parse_int(row["成交股數"]),
                     "trade_value": self._parse_int(row["成交金額"]),
                     "timestamp": self._roc_date_to_datetime(row["日期"]),
-                    # "note": row["註記"],
+                    "note": row["註記"],
                 }
             )
         return docs
