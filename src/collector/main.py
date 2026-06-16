@@ -70,6 +70,15 @@ class DataFrameConverter:
         """
         docs = []
         for _, row in df.iterrows():
+            # Skip non-trading days (e.g. 0051) where all price fields are "--":
+            # ["日期",       "成交股數", "成交金額", "開盤價", "最高價", "最低價", "收盤價", "漲跌價差", "成交筆數", "註記"]
+            # ["107/03/31",        "0",       "0",     "--",    "--",    "--",     "--",   " 0.00",       "0",     ""]
+            if row["開盤價"] == row["收盤價"] == row["最低價"] == row["最高價"] == "--":
+                date = self._roc_date_to_datetime(row["日期"]).date()
+                msg = f"Skipping non-trading day for {row['code']} on {date}"
+                logger.warning(msg)
+                continue
+
             docs.append(
                 {
                     "code": row["code"],
