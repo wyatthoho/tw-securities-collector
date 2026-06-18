@@ -1,8 +1,9 @@
+import datetime
 import logging
 import os
+import random
 import sys
 import time
-import datetime
 from typing import TypedDict
 
 import pandas as pd
@@ -41,6 +42,7 @@ MONGODB_URL = os.environ.get("MONGODB_URL")
 TRACEABLE_DATE = datetime.date(2010, 1, 4)
 TODAY = datetime.date.today()
 MIN_CYCLE_SECONDS = 5
+MAX_CYCLE_SECONDS = 12
 
 
 logging.basicConfig(
@@ -113,7 +115,8 @@ def next_month(_date: datetime.date) -> datetime.date:
 
 
 def throttle(elapsed: float) -> None:
-    remaining = MIN_CYCLE_SECONDS - elapsed
+    cycle_seconds = random.randint(MIN_CYCLE_SECONDS, MAX_CYCLE_SECONDS)
+    remaining = cycle_seconds - elapsed
     if remaining > 0:
         time.sleep(remaining)
 
