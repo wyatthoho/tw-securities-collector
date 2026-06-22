@@ -17,6 +17,14 @@ MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
 FETCH_RETRY_BACKOFF = [120, 240, 480, 720, 960]
 
+REFERER = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
+HEADERS = {
+    "user-agent": USER_AGENT,
+    "Referer": REFERER,
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "X-Requested-With": "XMLHttpRequest",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +94,17 @@ class SecurityCrawler:
 
         for backoff in FETCH_RETRY_BACKOFF:
             session = requests.Session()
+            response = None
             try:
-                # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
-                response = session.get(URL_PRICES, params=payload, headers=self._headers)
+                session.get(url=REFERER, headers=HEADERS)
+                response = session.get(URL_PRICES, params=payload, headers=HEADERS)
                 response.raise_for_status()
                 content = response.json()
+            except Exception as e:
+                raise Exception(
+                    f"Request failed: {e}\n"
+                    f"Response text: {response.text if response is not None else 'N/A'}"
+                ) from e
             finally:
                 session.close()
 
