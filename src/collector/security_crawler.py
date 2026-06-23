@@ -94,24 +94,24 @@ class SecurityCrawler:
 
         for backoff in FETCH_RETRY_BACKOFF:
             session = requests.Session()
-            response = None
             try:
+                # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
                 session.get(url=REFERER, headers=HEADERS)
                 response = session.get(URL_PRICES, params=payload, headers=HEADERS)
                 response.raise_for_status()
-                content = response.json()
             except Exception as e:
-                raise Exception(
-                    f"Request failed: {e}\n"
-                    f"Response text: {response.text if response is not None else 'N/A'}"
-                ) from e
+                raise Exception(f"Request failed: {e}\n") from e
             finally:
                 session.close()
 
-            if content["stat"] == "OK":
+            content: dict = response.json()
+
+            if content.get("stat") == "OK" and content.get("data") and content.get("fields"):
                 df = pd.DataFrame(content["data"], columns=content["fields"])
-                df.insert(0, "code", code)
-                return df
+
+                if not df.isnull().values.any():
+                    df.insert(0, "code", code)
+                    return df
 
             logger.warning(f"{content}")
             time.sleep(backoff)

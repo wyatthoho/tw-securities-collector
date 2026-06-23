@@ -41,8 +41,8 @@ load_dotenv()
 MONGODB_URL = os.environ.get("MONGODB_URL")
 TRACEABLE_DATE = datetime.date(2010, 1, 4)
 TODAY = datetime.date.today()
-MIN_CYCLE_SECONDS = 5
-MAX_CYCLE_SECONDS = 12
+MIN_CYCLE_SECONDS = 7
+MAX_CYCLE_SECONDS = 14
 
 
 logging.basicConfig(
@@ -151,25 +151,19 @@ def main():
 
             try:
                 prices = crawler.fetch_monthly_prices(code=code, date_tgt=start_date)
-
-                if not prices.empty:
-                    count = mongo.insert_absent_docs(converter.to_timeseries(prices))
-                    if count:
-                        logger.info(
-                            f"Uploaded {count} daily prices for {code} in {date_str}"
-                        )
-                    else:
-                        logger.info(f"No new daily prices for {code} in {date_str}")
-                else:
+                if prices.empty:
                     logger.warning(f"No data returned for {code} in {date_str}")
+                    continue
 
-                start_date = next_month(start_date)
+                count = mongo.insert_absent_docs(converter.to_timeseries(prices))
+                logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
 
-            except Exception as e:
-                logger.error(f"Failed to fetch/save data for {code} in {date_str}: {e}")
+            except Exception:
+                logger.exception(f"Failed to fetch/save data for {code} in {date_str}")
                 sys.exit()
 
             finally:
+                start_date = next_month(start_date)
                 throttle(elapsed=time.time() - t0)
 
     mongo.close()
