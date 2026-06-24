@@ -29,7 +29,7 @@ class TimeseriesDocument(TypedDict):
     closing_price: float
     lowest_price: float
     highest_price: float
-    price_change: float
+    price_change: str
     trade_count: int
     trade_shares: int
     trade_value: int
@@ -43,6 +43,7 @@ TRACEABLE_DATE = datetime.date(2010, 1, 4)
 TODAY = datetime.date.today()
 MIN_CYCLE_SECONDS = 7
 MAX_CYCLE_SECONDS = 14
+FETCH_RETRY_BACKOFF = [120, 240, 480, 720, 960]
 
 
 logging.basicConfig(
@@ -138,33 +139,41 @@ def main():
         code = doc["有價證券代號"]
         birth_date = mongo.get_birth_date(code)
         record_date = mongo.get_record_date(code) or TRACEABLE_DATE
-        start_date = max(birth_date, record_date, TRACEABLE_DATE)
+        fetch_date = max(birth_date, record_date, TRACEABLE_DATE)
 
-        if start_date >= TODAY:
+        if fetch_date >= TODAY:
             continue
 
         logger.info(f"[{idx}/{listings_count}] Processing {code}")
 
-        while start_date < TODAY:
-            t0 = time.time()
-            date_str = start_date.strftime("%Y-%m")
+        while fetch_date < TODAY:
+            date_str = fetch_date.strftime("%Y-%m")
+            success = False
 
-            try:
-                prices = crawler.fetch_monthly_prices(code=code, date_tgt=start_date)
-                if prices.empty:
-                    logger.warning(f"No data returned for {code} in {date_str}")
+            for backoff in FETCH_RETRY_BACKOFF:
+                t0 = time.time()
+                try:
+                    prices = crawler.fetch_monthly_prices(code=code, date_tgt=fetch_date)
+                    if prices.empty:
+                        logger.warning(f"No data returned for {code} in {date_str}")
+                        success = True
+                        break
+
+                    count = mongo.insert_absent_docs(converter.to_timeseries(prices))
+                    logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
+                    success = True
+                    break
+                except Exception as e:
+                    logger.error(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
+                    time.sleep(backoff)
                     continue
 
-                count = mongo.insert_absent_docs(converter.to_timeseries(prices))
-                logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
+            if not success:
+                logger.error(f"Exhausted retries for {code} in {date_str}")
+                sys.exit(1)
 
-            except Exception:
-                logger.exception(f"Failed to fetch/save data for {code} in {date_str}")
-                sys.exit()
-
-            finally:
-                start_date = next_month(start_date)
-                throttle(elapsed=time.time() - t0)
+            fetch_date = next_month(fetch_date)
+            throttle(elapsed=time.time() - t0)
 
     mongo.close()
     logger.info("Pipeline execution completed successfully.")

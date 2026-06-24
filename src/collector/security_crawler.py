@@ -1,7 +1,6 @@
 import datetime
 import logging
 import sys
-import time
 
 import pandas as pd
 import requests
@@ -15,7 +14,7 @@ URL_PRICES = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TABLE_CLASS = "h4"
 MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
-FETCH_RETRY_BACKOFF = [120, 240, 480, 720, 960]
+REQUIRED_FIELDS = {"日期", "開盤價", "收盤價", "最低價", "最高價", "成交筆數", "成交股數", "成交金額", "漲跌價差", "註記"}
 
 REFERER = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
 HEADERS = {
@@ -92,31 +91,37 @@ class SecurityCrawler:
             "stockNo": code,
         }
 
-        for backoff in FETCH_RETRY_BACKOFF:
-            session = requests.Session()
+        with requests.Session() as session:
             try:
-                # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
                 session.get(url=REFERER, headers=HEADERS)
-                response = session.get(URL_PRICES, params=payload, headers=HEADERS)
+            except Exception as e:
+                raise Exception(f"Initialize session failed: {e}\n") from e
+
+            try:
+                response = session.get(url=URL_PRICES, params=payload, headers=HEADERS)
                 response.raise_for_status()
             except Exception as e:
                 raise Exception(f"Request failed: {e}\n") from e
-            finally:
-                session.close()
 
+            url: str = response.url  # Something like: https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
             content: dict = response.json()
 
-            if content.get("stat") == "OK" and content.get("data") and content.get("fields"):
-                df = pd.DataFrame(content["data"], columns=content["fields"])
+        is_ok = content.get("stat") == "OK"
+        has_data = content.get("data")
+        has_fields = content.get("fields")
 
-                if not df.isnull().values.any():
-                    df.insert(0, "code", code)
-                    return df
+        if is_ok and has_data and has_fields:
+            df = pd.DataFrame(content["data"], columns=content["fields"])
 
-            logger.warning(f"{content}")
-            time.sleep(backoff)
+            missing_fields = REQUIRED_FIELDS - set(df.columns)
+            if missing_fields:
+                raise Exception(f"Missing required fields: {missing_fields}.\nURL: {url}\nContent: {content}")
 
-        raise Exception(f"Exhausted retries for {code} {date_tgt.strftime('%Y-%m')}")
+            if not df.isnull().values.any():
+                df.insert(0, "code", code)
+                return df
+
+        raise Exception(f"Response abnormal.\nURL: {url}\nContent: {content}")
 
 
 if __name__ == "__main__":
