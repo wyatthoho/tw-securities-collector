@@ -135,7 +135,9 @@ def main():
     mongo.upload_listings(converter.to_documents(listings_df))
     logger.info(f"Synchronized {listings_count} security listings.")
 
-    for idx, doc in enumerate(mongo.cl_listings.find(), 1):
+    listings = mongo.cl_listings.find().to_list()
+
+    for idx, doc in enumerate(listings, 1):
         code = doc["有價證券代號"]
         birth_date = mongo.get_birth_date(code)
         record_date = mongo.get_record_date(code) or TRACEABLE_DATE
