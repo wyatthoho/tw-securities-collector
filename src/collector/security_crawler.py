@@ -120,6 +120,13 @@ class SecurityCrawler:
             if not df.isnull().values.any():
                 df.insert(0, "code", code)
                 return df
+        
+        if content == {'stat': '很抱歉，沒有符合條件的資料!', 'total': 0}:
+            # The API returns this response when there's no data for the requested month.
+            # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
+            # Treat this as a valid "no data" case and return an empty DataFrame
+            # instead of raising an error.
+            return pd.DataFrame()
 
         raise Exception(f"Response abnormal.\nURL: {url}\nContent: {content}")
 
