@@ -161,12 +161,14 @@ def main():
                         success = True
                         break
 
+                    # Maybe it should be checked that the fetched date is within `fetch_date`
+
                     count = mongo.insert_absent_docs(converter.to_timeseries(prices))
                     logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
                     success = True
                     break
                 except Exception as e:
-                    logger.error(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
+                    logger.warning(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
                     time.sleep(backoff)
                     continue
 

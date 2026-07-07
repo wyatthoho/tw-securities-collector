@@ -128,8 +128,10 @@ class SecurityCrawler:
             # instead of raising an error.
             return pd.DataFrame()
 
-        raise Exception(f"Response abnormal.\nURL: {url}\nContent: {content}")
-
+        if content == {'stat': '查詢日期小於99年1月4日，請重新查詢!', 'total': 0}:
+            # This response is suspected (not confirmed) to indicate our requests
+            # are being blocked/rate-limited, rather than an actual "no data" result.
+            raise Exception(f"Request may be blocked by the server.\nURL: {url}\nContent: {content}")
 
 if __name__ == "__main__":
     logging.basicConfig(
