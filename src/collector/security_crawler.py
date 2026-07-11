@@ -14,7 +14,18 @@ URL_PRICES = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TABLE_CLASS = "h4"
 MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
-REQUIRED_FIELDS = {"日期", "開盤價", "收盤價", "最低價", "最高價", "成交筆數", "成交股數", "成交金額", "漲跌價差", "註記"}
+REQUIRED_FIELDS = {
+    "日期",
+    "開盤價",
+    "收盤價",
+    "最低價",
+    "最高價",
+    "成交筆數",
+    "成交股數",
+    "成交金額",
+    "漲跌價差",
+    "註記",
+}
 
 REFERER = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
 HEADERS = {
@@ -84,6 +95,16 @@ class SecurityCrawler:
                 year, month, day = [int(digit) for digit in text.split("/")]
                 return datetime.date(year, month, day)
 
+    def _check_missing_fields(self, df: pd.DataFrame) -> set[str]:
+        return REQUIRED_FIELDS - set(df.columns)
+
+    def _check_date_range(self, df: pd.DataFrame, date_tgt: datetime.date) -> bool:
+        dates = [
+            datetime.datetime(int(y) + 1911, int(m), int(d))
+            for y, m, d in (s.split("/") for s in df["日期"])
+        ]
+        return any((d.year, d.month) != (date_tgt.year, date_tgt.month) for d in dates)
+
     def fetch_monthly_prices(self, code: str, date_tgt: datetime.date) -> pd.DataFrame:
         payload = {
             "response": "json",
@@ -106,6 +127,27 @@ class SecurityCrawler:
             url: str = response.url  # Something like: https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
             content: dict = response.json()
 
+        if content == {"stat": "很抱歉，沒有符合條件的資料!", "total": 0}:
+            # The API returns this response when there's no data for the requested month.
+            # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
+            # Treat this as a valid "no data" case and return an empty DataFrame
+            # instead of raising an error.
+            return pd.DataFrame()
+
+        if content == {'stat': '查詢日期大於今日，請重新查詢!', 'total': 0}:
+            # This response is suspected (not confirmed) to indicate our requests
+            # are being blocked/rate-limited, rather than an actual "no data" result.
+            raise Exception(
+                f"Request may be blocked by the server.\nURL: {url}\nContent: {content}"
+            )
+
+        if content == {"stat": "查詢日期小於99年1月4日，請重新查詢!", "total": 0}:
+            # This response is suspected (not confirmed) to indicate our requests
+            # are being blocked/rate-limited, rather than an actual "no data" result.
+            raise Exception(
+                f"Request may be blocked by the server.\nURL: {url}\nContent: {content}"
+            )
+
         is_ok = content.get("stat") == "OK"
         has_data = content.get("data")
         has_fields = content.get("fields")
@@ -113,25 +155,23 @@ class SecurityCrawler:
         if is_ok and has_data and has_fields:
             df = pd.DataFrame(content["data"], columns=content["fields"])
 
-            missing_fields = REQUIRED_FIELDS - set(df.columns)
+            missing_fields = self._check_missing_fields(df)
             if missing_fields:
-                raise Exception(f"Missing required fields: {missing_fields}.\nURL: {url}\nContent: {content}")
+                raise Exception(
+                    f"Missing required fields: {missing_fields}.\nURL: {url}\nContent: {content}"
+                )
 
-            if not df.isnull().values.any():
-                df.insert(0, "code", code)
-                return df
-        
-        if content == {'stat': '很抱歉，沒有符合條件的資料!', 'total': 0}:
-            # The API returns this response when there's no data for the requested month.
-            # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
-            # Treat this as a valid "no data" case and return an empty DataFrame
-            # instead of raising an error.
-            return pd.DataFrame()
+            if self._check_date_range(df, date_tgt):
+                raise Exception(f"Out of target date.\nURL: {url}\nContent: {content}")
 
-        if content == {'stat': '查詢日期小於99年1月4日，請重新查詢!', 'total': 0}:
-            # This response is suspected (not confirmed) to indicate our requests
-            # are being blocked/rate-limited, rather than an actual "no data" result.
-            raise Exception(f"Request may be blocked by the server.\nURL: {url}\nContent: {content}")
+            if df.isnull().values.any():
+                raise Exception(f"Containing NULL.\nURL: {url}\nContent: {content}")
+
+            df.insert(0, "code", code)
+            return df
+        else:
+            raise Exception(f"Unknown Error.\nURL: {url}\nContent: {content}")
+
 
 if __name__ == "__main__":
     logging.basicConfig(

@@ -51,7 +51,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     stream=sys.stdout,
+    encoding="utf-8",
 )
+
 logger = logging.getLogger(__name__)
 
 
@@ -161,13 +163,14 @@ def main():
                         success = True
                         break
 
-                    # Maybe it should be checked that the fetched date is within `fetch_date`
-
                     count = mongo.insert_absent_docs(converter.to_timeseries(prices))
                     logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
                     success = True
                     break
                 except Exception as e:
+                    if str(e).startswith("Out of target date."):
+                        logger.error(f"Out of target date for {code} in {date_str}: {e}")
+                        sys.exit(1)
                     logger.warning(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
                     time.sleep(backoff)
                     continue
