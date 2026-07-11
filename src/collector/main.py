@@ -43,7 +43,7 @@ TRACEABLE_DATE = datetime.date(2010, 1, 4)
 TODAY = datetime.date.today()
 MIN_CYCLE_SECONDS = 7
 MAX_CYCLE_SECONDS = 14
-FETCH_RETRY_BACKOFF = [120, 240, 480, 720, 960]
+FETCH_RETRY_BACKOFF = [360, 360, 360, 360, 360]
 
 
 logging.basicConfig(
@@ -168,9 +168,6 @@ def main():
                     success = True
                     break
                 except Exception as e:
-                    if str(e).startswith("Out of target date."):
-                        logger.error(f"Out of target date for {code} in {date_str}: {e}")
-                        sys.exit(1)
                     logger.warning(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
                     time.sleep(backoff)
                     continue
