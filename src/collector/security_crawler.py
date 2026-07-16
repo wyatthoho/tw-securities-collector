@@ -8,10 +8,18 @@ from bs4 import BeautifulSoup, ResultSet
 
 
 USER_AGENT = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
-COLUMNS_SKIP = ["", "頁面編號"]
+REFERER = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
+HEADERS = {
+    "user-agent": USER_AGENT,
+    "Referer": REFERER,
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "X-Requested-With": "XMLHttpRequest",
+}
 URL_LISTINGS = "https://isin.twse.com.tw/isin/single_main.jsp?"
 URL_PRICES = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 TABLE_CLASS = "h4"
+COLUMNS_SKIP = ["", "頁面編號"]
 MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
 REQUIRED_FIELDS = {
@@ -27,16 +35,12 @@ REQUIRED_FIELDS = {
     "註記",
 }
 
-REFERER = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
-HEADERS = {
-    "user-agent": USER_AGENT,
-    "Referer": REFERER,
-    "Accept": "application/json, text/javascript, */*; q=0.01",
-    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-    "X-Requested-With": "XMLHttpRequest",
-}
 
 logger = logging.getLogger(__name__)
+
+
+class ResponseError(Exception):
+    """Raised when the response content fails schema/data validation."""
 
 
 class SecurityCrawler:
@@ -94,18 +98,8 @@ class SecurityCrawler:
             if cond1 and cond2:
                 year, month, day = [int(digit) for digit in text.split("/")]
                 return datetime.date(year, month, day)
-
-    def _check_missing_fields(self, df: pd.DataFrame) -> set[str]:
-        return REQUIRED_FIELDS - set(df.columns)
-
-    def _check_date_range(self, df: pd.DataFrame, date_tgt: datetime.date) -> bool:
-        dates = [
-            datetime.datetime(int(y) + 1911, int(m), int(d))
-            for y, m, d in (s.split("/") for s in df["日期"])
-        ]
-        return any((d.year, d.month) != (date_tgt.year, date_tgt.month) for d in dates)
-
-    def fetch_monthly_prices(self, code: str, date_tgt: datetime.date) -> pd.DataFrame:
+    @staticmethod
+    def _send_request(code: str, date_tgt: datetime.date) -> requests.Response:
         payload = {
             "response": "json",
             "date": str(date_tgt).replace("-", ""),
@@ -123,54 +117,63 @@ class SecurityCrawler:
                 response.raise_for_status()
             except Exception as e:
                 raise Exception(f"Request failed: {e}\n") from e
+        return response
 
-            url: str = response.url  # Something like: https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
-            content: dict = response.json()
-
-        if content == {"stat": "很抱歉，沒有符合條件的資料!", "total": 0}:
-            # The API returns this response when there's no data for the requested month.
-            # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
-            # Treat this as a valid "no data" case and return an empty DataFrame
-            # instead of raising an error.
-            return pd.DataFrame()
-
+    @staticmethod
+    def _examine_response_content(content: dict, date_tgt: datetime.date) -> None:
         if content == {'stat': '查詢日期大於今日，請重新查詢!', 'total': 0}:
-            # This response is suspected (not confirmed) to indicate our requests
-            # are being blocked/rate-limited, rather than an actual "no data" result.
-            raise Exception(
-                f"Request may be blocked by the server.\nURL: {url}\nContent: {content}"
-            )
+            raise Exception("Request may be blocked by the server.")
 
         if content == {"stat": "查詢日期小於99年1月4日，請重新查詢!", "total": 0}:
-            # This response is suspected (not confirmed) to indicate our requests
-            # are being blocked/rate-limited, rather than an actual "no data" result.
-            raise Exception(
-                f"Request may be blocked by the server.\nURL: {url}\nContent: {content}"
-            )
+            raise Exception("Request may be blocked by the server.")
 
-        is_ok = content.get("stat") == "OK"
-        has_data = content.get("data")
-        has_fields = content.get("fields")
+        if content.get("stat") != "OK":
+            raise Exception("Response stat is not OK.")
 
-        if is_ok and has_data and has_fields:
-            df = pd.DataFrame(content["data"], columns=content["fields"])
+        fields = content.get("fields")
+        if not fields:
+            raise Exception("No fields response.")
 
-            missing_fields = self._check_missing_fields(df)
-            if missing_fields:
-                raise Exception(
-                    f"Missing required fields: {missing_fields}.\nURL: {url}\nContent: {content}"
-                )
+        missing_fields = REQUIRED_FIELDS - set(fields)
+        if missing_fields:
+            raise Exception(f"Missing required fields: {missing_fields}.")
 
-            if self._check_date_range(df, date_tgt):
-                raise Exception(f"Out of target date.\nURL: {url}\nContent: {content}")
+        data = content.get("data")
+        if not data:
+            raise Exception("No data response.")
 
-            if df.isnull().values.any():
-                raise Exception(f"Containing NULL.\nURL: {url}\nContent: {content}")
+        for row in data:
+            for idx, ele in enumerate(row):
+                if ele is None:
+                    raise Exception("Data containing NULL.")
+                if idx == 0:
+                    y, m, d = ele.split("/")
+                    if (int(y) + 1911, int(m)) != (date_tgt.year, date_tgt.month):
+                        raise Exception("Out of target date.")
 
-            df.insert(0, "code", code)
-            return df
-        else:
-            raise Exception(f"Unknown Error.\nURL: {url}\nContent: {content}")
+    def fetch_monthly_prices(self, code: str, date_tgt: datetime.date) -> pd.DataFrame:
+        response = self._send_request(code, date_tgt)
+
+        # Example request URL:
+        # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
+        url: str = response.url
+        content: dict = response.json()
+
+        # The API returns this response when there's no data for the requested month.
+        # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
+        # Treat this as a valid "no data" case and return an empty DataFrame
+        # instead of raising an error.
+        if content == {"stat": "很抱歉，沒有符合條件的資料!", "total": 0}:
+            return pd.DataFrame()
+
+        try:
+            self._examine_response_content(content, date_tgt)
+        except Exception as e:
+            raise ResponseError(f"{e}\nURL: {url}\nContent: {content}")
+
+        df = pd.DataFrame(content["data"], columns=content["fields"])
+        df.insert(0, "code", code)
+        return df
 
 
 if __name__ == "__main__":
