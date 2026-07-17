@@ -10,7 +10,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from collector.mongodb_handler import MongoHandler
-from collector.security_crawler import SecurityCrawler
+from collector.security_crawler import SecurityCrawler, ResponseError, HTTPError
 
 
 class ListingDocument(TypedDict):
@@ -167,7 +167,7 @@ def main():
                     logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
                     success = True
                     break
-                except SecurityCrawler.ResponseError as e:
+                except (ResponseError, HTTPError) as e:
                     logger.warning(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
                     time.sleep(backoff)
                     continue

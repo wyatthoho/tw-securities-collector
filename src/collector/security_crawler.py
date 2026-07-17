@@ -39,6 +39,9 @@ REQUIRED_FIELDS = {
 logger = logging.getLogger(__name__)
 
 
+class HTTPError(Exception):
+    """Raised when a HTTP error."""
+
 class ResponseError(Exception):
     """Raised when the response content fails schema/data validation."""
 
@@ -98,6 +101,7 @@ class SecurityCrawler:
             if cond1 and cond2:
                 year, month, day = [int(digit) for digit in text.split("/")]
                 return datetime.date(year, month, day)
+
     @staticmethod
     def _send_request(code: str, date_tgt: datetime.date) -> requests.Response:
         payload = {
@@ -115,13 +119,13 @@ class SecurityCrawler:
             try:
                 response = session.get(url=URL_PRICES, params=payload, headers=HEADERS)
                 response.raise_for_status()
-            except Exception as e:
-                raise Exception(f"Request failed: {e}\n") from e
+            except requests.exceptions.HTTPError as e:
+                raise HTTPError(f"HTTPError: {e}\n") from e
         return response
 
     @staticmethod
     def _examine_response_content(content: dict, date_tgt: datetime.date) -> None:
-        if content == {'stat': '查詢日期大於今日，請重新查詢!', 'total': 0}:
+        if content == {"stat": "查詢日期大於今日，請重新查詢!", "total": 0}:
             raise Exception("Request may be blocked by the server.")
 
         if content == {"stat": "查詢日期小於99年1月4日，請重新查詢!", "total": 0}:
