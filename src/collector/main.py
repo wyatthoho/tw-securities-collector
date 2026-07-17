@@ -87,14 +87,14 @@ class DataFrameConverter:
             docs.append(
                 {
                     "code": row["code"],
-                    "opening_price": float(row["開盤價"]),
-                    "closing_price": float(row["收盤價"]),
-                    "lowest_price": float(row["最低價"]),
-                    "highest_price": float(row["最高價"]),
+                    "opening_price": float(self._remove_separator(row["開盤價"])),
+                    "closing_price": float(self._remove_separator(row["收盤價"])),
+                    "lowest_price": float(self._remove_separator(row["最低價"])),
+                    "highest_price": float(self._remove_separator(row["最高價"])),
                     "price_change": row["漲跌價差"],
-                    "trade_count": self._parse_int(row["成交筆數"]),
-                    "trade_shares": self._parse_int(row["成交股數"]),
-                    "trade_value": self._parse_int(row["成交金額"]),
+                    "trade_count": int(self._remove_separator(row["成交筆數"])),
+                    "trade_shares": int(self._remove_separator(row["成交股數"])),
+                    "trade_value": int(self._remove_separator(row["成交金額"])),
                     "timestamp": self._roc_date_to_datetime(row["日期"]),
                     "note": row["註記"],
                 }
@@ -102,8 +102,8 @@ class DataFrameConverter:
         return docs
 
     @staticmethod
-    def _parse_int(value: str) -> int:
-        return int(value.replace(",", ""))
+    def _remove_separator(value: str) -> str:
+        return value.replace(",", "")
 
     @staticmethod
     def _roc_date_to_datetime(roc_date: str) -> datetime.datetime:
@@ -167,10 +167,13 @@ def main():
                     logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
                     success = True
                     break
-                except Exception as e:
+                except SecurityCrawler.ResponseError as e:
                     logger.warning(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
                     time.sleep(backoff)
                     continue
+                except Exception as e:
+                    logger.error(f"Unexpected error for {code} in {date_str}. \n\n{str(e)}\n")
+                    break
 
             if not success:
                 logger.error(f"Exhausted retries for {code} in {date_str}")
