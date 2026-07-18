@@ -172,11 +172,11 @@ def main():
                     time.sleep(backoff)
                     continue
                 except Exception as e:
-                    logger.error(f"Unexpected error for {code} in {date_str}. \n\n{str(e)}\n")
+                    logger.exception(f"Unexpected error for {code} in {date_str}")
                     break
 
             if not success:
-                logger.error(f"Exhausted retries for {code} in {date_str}")
+                logger.error(f"Stopped for {code} in {date_str}")
                 sys.exit(1)
 
             fetch_date = next_month(fetch_date)

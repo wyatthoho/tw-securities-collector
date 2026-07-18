@@ -161,7 +161,11 @@ class SecurityCrawler:
         # Example request URL:
         # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
         url: str = response.url
-        content: dict = response.json()
+
+        try:
+            content: dict = response.json()
+        except ValueError as e:
+            raise ResponseError(f"Invalid JSON response: {e}\nURL: {url}\nBody: {response.text!r}")
 
         # The API returns this response when there's no data for the requested month.
         # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
