@@ -4,6 +4,7 @@ import os
 import random
 import sys
 import time
+import zoneinfo
 from typing import TypedDict
 
 import pandas as pd
@@ -40,7 +41,8 @@ class TimeseriesDocument(TypedDict):
 load_dotenv()
 POSTGRES_URL = os.environ.get("POSTGRES_URL")
 TRACEABLE_DATE = datetime.date(2010, 1, 4)
-TODAY = datetime.date.today()
+TIMEZONE = zoneinfo.ZoneInfo("Asia/Taipei")
+TODAY = datetime.datetime.now(tz=TIMEZONE).date()
 MIN_CYCLE_SECONDS = 7
 MAX_CYCLE_SECONDS = 14
 FETCH_RETRY_BACKOFF = [360, 360, 360, 360, 360]
@@ -140,10 +142,14 @@ def main():
 
     for idx, listing in enumerate(listings, 1):
         code = listing["有價證券代號"]
-        birth_date = datetime.datetime.strptime(
-            listing["公開發行/上市(櫃)/發行日"],
-            "%Y/%m/%d",
-        ).date()
+        birth_date = (
+            datetime.datetime.strptime(
+                listing["公開發行/上市(櫃)/發行日"],
+                "%Y/%m/%d",
+            )
+            .replace(tzinfo=TIMEZONE)
+            .date()
+        )
         record_date = postgres.get_record_date(code) or TRACEABLE_DATE
         fetch_date = max(birth_date, record_date, TRACEABLE_DATE)
 
