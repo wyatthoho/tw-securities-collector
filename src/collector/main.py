@@ -127,28 +127,30 @@ class DataFrameConverter:
 def main():
     logger.info("Initializing Taiwan stock crawling pipeline...")
 
-    db_handler = PostgresHandler(url=POSTGRES_URL)
+    postgres = PostgresHandler(url=POSTGRES_URL)
     crawler = SecurityCrawler()
     converter = DataFrameConverter()
 
     # Fetch and sync listings
     listings_df = crawler.fetch_listings()
     listings_count = len(listings_df)
-    db_handler.upload_listings(converter.to_listing_rows(listings_df))
-    logger.info(f"Synchronized {listings_count} security listings.")
+    postgres.upload_listings(converter.to_listing_rows(listings_df))
 
-    # listings = db_handler.cl_listings.find().to_list()
+    listings = postgres.fetch_listings()
 
-    # for idx, doc in enumerate(listings, 1):
-    #     code = doc["有價證券代號"]
-    #     birth_date = db_handler.get_birth_date(code)
-    #     record_date = db_handler.get_record_date(code) or TRACEABLE_DATE
-    #     fetch_date = max(birth_date, record_date, TRACEABLE_DATE)
+    for idx, listing in enumerate(listings, 1):
+        code = listing["有價證券代號"]
+        birth_date = datetime.datetime.strptime(
+            listing["公開發行/上市(櫃)/發行日"],
+            "%Y/%m/%d",
+        ).date()
+        record_date = postgres.get_record_date(code) or TRACEABLE_DATE
+        fetch_date = max(birth_date, record_date, TRACEABLE_DATE)
 
-    #     if fetch_date >= TODAY:
-    #         continue
+        if fetch_date >= TODAY:
+            continue
 
-    #     logger.info(f"[{idx}/{listings_count}] Processing {code}")
+        logger.info(f"[{idx}/{listings_count}] Processing {code}")
 
     #     while fetch_date < TODAY:
     #         date_str = fetch_date.strftime("%Y-%m")
@@ -163,7 +165,7 @@ def main():
     #                     success = True
     #                     break
 
-    #                 count = db_handler.insert_absent_docs(converter.to_timeseries(prices))
+    #                 count = postgres.insert_absent_docs(converter.to_timeseries(prices))
     #                 logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
     #                 success = True
     #                 break
@@ -182,7 +184,7 @@ def main():
     #         fetch_date = next_month(fetch_date)
     #         throttle(elapsed=time.time() - t0)
 
-    # db_handler.close()
+    # postgres.close()
     # logger.info("Pipeline execution completed successfully.")
 
 
