@@ -1,23 +1,24 @@
 import datetime
 import logging
-import sys
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup, ResultSet
 
+URL_PAGE = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
+URL_FETCH_LISTINGS = "https://isin.twse.com.tw/isin/single_main.jsp?"
+URL_FETCH_DAILY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 
 USER_AGENT = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
-REFERER = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
-HEADERS = {
+HEADERS_LISTING = {"user-agent": USER_AGENT}
+HEADERS_DAILY = {
     "user-agent": USER_AGENT,
-    "Referer": REFERER,
+    "Referer": URL_PAGE,
     "Accept": "application/json, text/javascript, */*; q=0.01",
     "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
     "X-Requested-With": "XMLHttpRequest",
 }
-URL_LISTINGS = "https://isin.twse.com.tw/isin/single_main.jsp?"
-URL_PRICES = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+
 TABLE_CLASS = "h4"
 COLUMNS_SKIP = ["", "頁面編號"]
 MARKET_FILTER = ["上市"]
@@ -39,8 +40,17 @@ REQUIRED_FIELDS = {
 logger = logging.getLogger(__name__)
 
 
-class HTTPError(Exception):
+class VisitPageError(Exception):
+    """Raised when visiting the referer page to initialize the session fails."""
+
+
+class TWSEHTTPError(Exception):
     """Raised when a HTTP error."""
+
+
+class ContentError(Exception):
+    """Raised when the response content fails validation checks."""
+
 
 class ResponseError(Exception):
     """Raised when the response content fails schema/data validation."""
@@ -54,9 +64,8 @@ class SecurityCrawler:
     ):
         self.market_filter = market_filter
         self.security_type_filter = security_type_filter
-        self._headers = {"user-agent": USER_AGENT}
 
-    def _security_filter(self, data: dict[str, str]) -> bool:
+    def _filter_security(self, data: dict[str, str]) -> bool:
         cond1 = not data["有價證券代號"][-1].isalpha()
         cond2 = not data["有價證券代號"][0].isalpha()
         cond3 = data["市場別"] in self.market_filter
@@ -72,14 +81,14 @@ class SecurityCrawler:
                 for column, content in zip(columns, data_dirty)
                 if column not in COLUMNS_SKIP
             }
-            if self._security_filter(data_cleaned):
+            if self._filter_security(data_cleaned):
                 df_data = pd.DataFrame([data_cleaned])
                 df = pd.concat([df, df_data], ignore_index=True)
         return df
 
     def fetch_listings(self) -> pd.DataFrame:
         logger.info("Fetching security listings table from TWSE...")
-        response = requests.get(URL_LISTINGS, headers=self._headers)
+        response = requests.get(URL_FETCH_LISTINGS, headers=HEADERS_LISTING)
         soup = BeautifulSoup(response.text, "html.parser")
 
         table = soup.find("table", class_=TABLE_CLASS)
@@ -87,20 +96,6 @@ class SecurityCrawler:
         columns = first_row.text.split("\n")
         other_rows = first_row.find_next_siblings("tr")
         return self._collect_securities(columns, other_rows)
-
-    def search_listed_date(self, code: str) -> datetime.date | None:
-        payload = {"owncode": code, "stockname": ""}
-        response = requests.get(URL_LISTINGS, params=payload, headers=self._headers)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        td_all = soup.find_all("td")
-        for element in td_all:
-            text = element.get_text()
-            cond1 = len(text.split("/")) == 3
-            cond2 = text.replace("/", "").isdigit()
-            if cond1 and cond2:
-                year, month, day = [int(digit) for digit in text.split("/")]
-                return datetime.date(year, month, day)
 
     @staticmethod
     def _send_request(code: str, date_tgt: datetime.date) -> requests.Response:
@@ -112,50 +107,54 @@ class SecurityCrawler:
 
         with requests.Session() as session:
             try:
-                session.get(url=REFERER, headers=HEADERS)
+                session.get(url=URL_PAGE, headers=HEADERS_DAILY)
             except Exception as e:
-                raise Exception(f"Initialize session failed: {e}\n") from e
+                raise VisitPageError(f"Initialize session failed: {e}") from e
 
             try:
-                response = session.get(url=URL_PRICES, params=payload, headers=HEADERS)
+                response = session.get(
+                    url=URL_FETCH_DAILY, params=payload, headers=HEADERS_DAILY
+                )
                 response.raise_for_status()
             except requests.exceptions.HTTPError as e:
-                raise HTTPError(f"HTTPError: {e}\n") from e
+                raise TWSEHTTPError(f"HTTPError: {e}") from e
         return response
 
     @staticmethod
     def _examine_response_content(content: dict, date_tgt: datetime.date) -> None:
         if content == {"stat": "查詢日期大於今日，請重新查詢!", "total": 0}:
-            raise Exception("Request may be blocked by the server.")
+            raise ContentError("Request may be blocked by the server.")
 
         if content == {"stat": "查詢日期小於99年1月4日，請重新查詢!", "total": 0}:
-            raise Exception("Request may be blocked by the server.")
+            raise ContentError("Request may be blocked by the server.")
 
         if content.get("stat") != "OK":
-            raise Exception("Response stat is not OK.")
+            raise ContentError("Response stat is not OK.")
 
         fields = content.get("fields")
         if not fields:
-            raise Exception("No fields response.")
+            raise ContentError("No fields response.")
 
         missing_fields = REQUIRED_FIELDS - set(fields)
         if missing_fields:
-            raise Exception(f"Missing required fields: {missing_fields}.")
+            raise ContentError(f"Missing required fields: {missing_fields}.")
 
         data = content.get("data")
         if not data:
-            raise Exception("No data response.")
+            raise ContentError("No data response.")
 
         for row in data:
             for idx, ele in enumerate(row):
                 if ele is None:
-                    raise Exception("Data containing NULL.")
+                    raise ContentError("Data containing NULL.")
                 if idx == 0:
-                    y, m, d = ele.split("/")
+                    y, m, _ = ele.split("/")
                     if (int(y) + 1911, int(m)) != (date_tgt.year, date_tgt.month):
-                        raise Exception("Out of target date.")
+                        raise ContentError("Out of target date.")
 
-    def fetch_monthly_prices(self, code: str, date_tgt: datetime.date) -> pd.DataFrame:
+    def fetch_daily_prices_by_month(
+        self, code: str, date_tgt: datetime.date
+    ) -> pd.DataFrame:
         response = self._send_request(code, date_tgt)
 
         # Example request URL:
@@ -165,7 +164,9 @@ class SecurityCrawler:
         try:
             content: dict = response.json()
         except ValueError as e:
-            raise ResponseError(f"Invalid JSON response: {e}\nURL: {url}\nBody: {response.text!r}")
+            raise ResponseError(
+                f"Invalid JSON response: {e}\nURL: {url}\nBody: {response.text!r}"
+            )
 
         # The API returns this response when there's no data for the requested month.
         # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
@@ -176,25 +177,9 @@ class SecurityCrawler:
 
         try:
             self._examine_response_content(content, date_tgt)
-        except Exception as e:
+        except ContentError as e:
             raise ResponseError(f"{e}\nURL: {url}\nContent: {content}")
 
         df = pd.DataFrame(content["data"], columns=content["fields"])
         df.insert(0, "code", code)
         return df
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        stream=sys.stdout,
-    )
-    crawler = SecurityCrawler()
-    securities = crawler.fetch_listings()
-    date_listed = crawler.search_listed_date("00639")
-    security_prices = crawler.fetch_monthly_prices(
-        code="00639", date_tgt=datetime.date(2015, 12, 1)
-    )
-    logger.info("Prices collected successfully.")

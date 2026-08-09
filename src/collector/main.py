@@ -10,7 +10,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from collector.postgres_handler import COLUMNS_LISTINGS, PostgresHandler
-from collector.security_crawler import HTTPError, ResponseError, SecurityCrawler
+from collector.security_crawler import TWSEHTTPError, ResponseError, SecurityCrawler
 
 load_dotenv()
 POSTGRES_URL = os.environ.get("POSTGRES_URL")
@@ -84,7 +84,7 @@ class DataFrameConverter:
     @staticmethod
     def _roc_date_to_datetime(roc_date: str) -> datetime.datetime:
         year, month, day = map(int, roc_date.split("/"))
-        return datetime.datetime(year + 1911, month, day)
+        return datetime.datetime(year + 1911, month, day, tzinfo=TIMEZONE)
 
 
 def next_month(_date: datetime.date) -> datetime.date:
@@ -139,7 +139,7 @@ def main():
             for backoff in FETCH_RETRY_BACKOFF:
                 t0 = time.time()
                 try:
-                    prices = crawler.fetch_monthly_prices(
+                    prices = crawler.fetch_daily_prices_by_month(
                         code=code, date_tgt=fetch_date
                     )
                     if prices.empty:
@@ -150,9 +150,9 @@ def main():
                     postgres.upload_daily_prices(converter.to_daily_rows(prices))
                     success = True
                     break
-                except (ResponseError, HTTPError) as e:
+                except (ResponseError, TWSEHTTPError) as e:
                     logger.warning(
-                        f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n"
+                        f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{e}\n"
                     )
                     time.sleep(backoff)
                     continue
