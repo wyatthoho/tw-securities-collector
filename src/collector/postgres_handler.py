@@ -17,6 +17,19 @@ COLUMNS_LISTINGS = [
     "CFICode",
     "備 註",
 ]
+COLUMNS_DAILY = [
+    "code",
+    "trade_date",
+    "opening_price",
+    "closing_price",
+    "lowest_price",
+    "highest_price",
+    "price_change",
+    "trade_count",
+    "trade_shares",
+    "trade_value",
+    "note",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +44,9 @@ class PostgresHandler:
         if not rows:
             return
 
-        columns_sql = ", ".join(f'"{col}"' for col in COLUMNS_LISTINGS)
+        columns = ", ".join(f'"{col}"' for col in COLUMNS_LISTINGS)
         sql = f"""
-            INSERT INTO {TABLE_NAME_LISTINGS} ({columns_sql})
+            INSERT INTO {TABLE_NAME_LISTINGS} ({columns})
             VALUES %s
             ON CONFLICT ("有價證券代號") DO NOTHING
         """
@@ -43,9 +56,9 @@ class PostgresHandler:
         logger.info(f"Synchronized {len(rows)} security listings.")
 
     def fetch_listings(self) -> list[dict]:
-        columns_sql = ", ".join(f'"{col}"' for col in COLUMNS_LISTINGS)
+        columns = ", ".join(f'"{col}"' for col in COLUMNS_LISTINGS)
         sql = f"""
-            SELECT {columns_sql}
+            SELECT {columns}
             FROM {TABLE_NAME_LISTINGS}
             ORDER BY "有價證券代號"
         """
@@ -63,3 +76,22 @@ class PostgresHandler:
             cur.execute(sql, (code,))
             row = cur.fetchone()
         return row[0] if row and row[0] else None
+
+    def upload_daily_prices(self, rows: list[tuple]) -> None:
+        columns = ", ".join(COLUMNS_DAILY)
+        sql = f"""
+            INSERT INTO {TABLE_NAME_DAILY} ({columns})
+            VALUES %s
+            ON CONFLICT (code, trade_date) DO NOTHING
+            RETURNING code
+        """
+        with self.conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, rows)
+            inserted = cur.fetchall()
+
+        logger.info(f"Uploaded {len(inserted)} daily price records.")
+        return len(inserted)
+
+    def close(self) -> None:
+        self.conn.close()
+        logger.info("PostgreSQL connection closed.")
