@@ -40,7 +40,7 @@ class PostgresHandler:
         self.conn.autocommit = True
         logger.info("Connected to PostgreSQL.")
 
-    def upload_listings(self, rows: list[tuple]) -> None:
+    def upload_listings(self, rows: list[dict]) -> None:
         if not rows:
             return
 
@@ -50,8 +50,9 @@ class PostgresHandler:
             VALUES %s
             ON CONFLICT ("有價證券代號") DO NOTHING
         """
+        values = [tuple(row[col] for col in COLUMNS_LISTINGS) for row in rows]
         with self.conn.cursor() as cur:
-            psycopg2.extras.execute_values(cur, sql, rows)
+            psycopg2.extras.execute_values(cur, sql, values)
 
         logger.info(f"Synchronized {len(rows)} security listings.")
 
@@ -77,7 +78,10 @@ class PostgresHandler:
             row = cur.fetchone()
         return row[0] if row and row[0] else None
 
-    def upload_daily_prices(self, rows: list[tuple]) -> None:
+    def upload_daily_prices(self, rows: list[dict]) -> int:
+        if not rows:
+            return 0
+
         columns = ", ".join(COLUMNS_DAILY)
         sql = f"""
             INSERT INTO {TABLE_NAME_DAILY} ({columns})
@@ -85,8 +89,9 @@ class PostgresHandler:
             ON CONFLICT (code, trade_date) DO NOTHING
             RETURNING code
         """
+        values = [tuple(row[col] for col in COLUMNS_DAILY) for row in rows]
         with self.conn.cursor() as cur:
-            psycopg2.extras.execute_values(cur, sql, rows)
+            psycopg2.extras.execute_values(cur, sql, values)
             inserted = cur.fetchall()
 
         logger.info(f"Uploaded {len(inserted)} daily price records.")

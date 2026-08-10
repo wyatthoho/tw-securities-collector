@@ -6,11 +6,10 @@ import sys
 import time
 import zoneinfo
 
-import pandas as pd
 from dotenv import load_dotenv
 
-from collector.postgres_handler import COLUMNS_LISTINGS, PostgresHandler
-from collector.security_crawler import TWSEHTTPError, ResponseError, SecurityCrawler
+from collector.postgres_handler import PostgresHandler
+from collector.security_crawler import ResponseError, SecurityCrawler, TWSEHTTPError
 
 load_dotenv()
 POSTGRES_URL = os.environ.get("POSTGRES_URL")
@@ -34,12 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 class DataFrameConverter:
-    def to_listing_rows(self, df: pd.DataFrame) -> list[tuple]:
-        return list(df[COLUMNS_LISTINGS].itertuples(index=False, name=None))
-
-    def to_daily_rows(self, df: pd.DataFrame) -> list[tuple]:
+    def to_daily_rows(self, rows: list[dict]) -> list[dict]:
         """
-        Converts TWSE raw DataFrame into a list of TimeseriesDocuments.
+        Converts TWSE raw rows into daily price records keyed by DB column names.
 
         Notes on excluded fields:
         - '漲跌價差' (Price Change): Excluded due to non-numeric indicators (+, -, X).
@@ -50,7 +46,7 @@ class DataFrameConverter:
         (used mainly for rare events like stock splits or par value changes).
         """
         docs = []
-        for _, row in df.iterrows():
+        for row in rows:
             # Skip non-trading days (e.g. 0051) where all price fields are "--":
             # ["日期",       "成交股數", "成交金額", "開盤價", "最高價", "最低價", "收盤價", "漲跌價差", "成交筆數", "註記"]
             # ["107/03/31",        "0",       "0",     "--",    "--",    "--",     "--",   " 0.00",       "0",     ""]
@@ -61,19 +57,19 @@ class DataFrameConverter:
                 continue
 
             docs.append(
-                (
-                    row["code"],
-                    self._roc_date_to_datetime(row["日期"]),
-                    float(self._remove_separator(row["開盤價"])),
-                    float(self._remove_separator(row["收盤價"])),
-                    float(self._remove_separator(row["最低價"])),
-                    float(self._remove_separator(row["最高價"])),
-                    row["漲跌價差"],
-                    int(self._remove_separator(row["成交筆數"])),
-                    int(self._remove_separator(row["成交股數"])),
-                    int(self._remove_separator(row["成交金額"])),
-                    row["註記"],
-                )
+                {
+                    "code": row["code"],
+                    "trade_date": self._roc_date_to_datetime(row["日期"]),
+                    "opening_price": float(self._remove_separator(row["開盤價"])),
+                    "closing_price": float(self._remove_separator(row["收盤價"])),
+                    "lowest_price": float(self._remove_separator(row["最低價"])),
+                    "highest_price": float(self._remove_separator(row["最高價"])),
+                    "price_change": row["漲跌價差"],
+                    "trade_count": int(self._remove_separator(row["成交筆數"])),
+                    "trade_shares": int(self._remove_separator(row["成交股數"])),
+                    "trade_value": int(self._remove_separator(row["成交金額"])),
+                    "note": row["註記"],
+                }
             )
         return docs
 
@@ -108,11 +104,11 @@ def main():
     converter = DataFrameConverter()
 
     # Fetch and sync listings
-    listings_df = crawler.fetch_listings()
-    listings_count = len(listings_df)
-    postgres.upload_listings(converter.to_listing_rows(listings_df))
+    listings = crawler.fetch_listings()
+    postgres.upload_listings(listings)
 
     listings = postgres.fetch_listings()
+    listings_count = len(listings)
 
     for idx, listing in enumerate(listings, 1):
         code = listing["有價證券代號"]
@@ -142,7 +138,7 @@ def main():
                     prices = crawler.fetch_daily_prices_by_month(
                         code=code, date_tgt=fetch_date
                     )
-                    if prices.empty:
+                    if not prices:
                         logger.warning(f"No data returned for {code} in {date_str}")
                         success = True
                         break

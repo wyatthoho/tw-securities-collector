@@ -1,7 +1,6 @@
 import datetime
 import logging
 
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup, ResultSet
 
@@ -72,8 +71,8 @@ class SecurityCrawler:
         cond4 = data["有價證券別"] in self.security_type_filter
         return all([cond1, cond2, cond3, cond4])
 
-    def _collect_securities(self, columns: list[str], rows: ResultSet) -> pd.DataFrame:
-        df = pd.DataFrame()
+    def _assemble_listings(self, columns: list[str], rows: ResultSet) -> list[dict]:
+        listings_info = []
         for row in rows:
             data_dirty = row.text.split("\n")
             data_cleaned = {
@@ -82,11 +81,10 @@ class SecurityCrawler:
                 if column not in COLUMNS_SKIP
             }
             if self._filter_security(data_cleaned):
-                df_data = pd.DataFrame([data_cleaned])
-                df = pd.concat([df, df_data], ignore_index=True)
-        return df
+                listings_info.append(data_cleaned)
+        return listings_info
 
-    def fetch_listings(self) -> pd.DataFrame:
+    def fetch_listings(self) -> list[dict]:
         logger.info("Fetching security listings table from TWSE...")
         response = requests.get(URL_FETCH_LISTINGS, headers=HEADERS_LISTING)
         soup = BeautifulSoup(response.text, "html.parser")
@@ -95,7 +93,7 @@ class SecurityCrawler:
         first_row = table.find("tr")
         columns = first_row.text.split("\n")
         other_rows = first_row.find_next_siblings("tr")
-        return self._collect_securities(columns, other_rows)
+        return self._assemble_listings(columns, other_rows)
 
     @staticmethod
     def _send_request(code: str, date_tgt: datetime.date) -> requests.Response:
@@ -154,7 +152,7 @@ class SecurityCrawler:
 
     def fetch_daily_prices_by_month(
         self, code: str, date_tgt: datetime.date
-    ) -> pd.DataFrame:
+    ) -> list[dict]:
         response = self._send_request(code, date_tgt)
 
         # Example request URL:
@@ -170,16 +168,15 @@ class SecurityCrawler:
 
         # The API returns this response when there's no data for the requested month.
         # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
-        # Treat this as a valid "no data" case and return an empty DataFrame
+        # Treat this as a valid "no data" case and return an empty list
         # instead of raising an error.
         if content == {"stat": "很抱歉，沒有符合條件的資料!", "total": 0}:
-            return pd.DataFrame()
+            return []
 
         try:
             self._examine_response_content(content, date_tgt)
         except ContentError as e:
             raise ResponseError(f"{e}\nURL: {url}\nContent: {content}")
 
-        df = pd.DataFrame(content["data"], columns=content["fields"])
-        df.insert(0, "code", code)
-        return df
+        fields = content["fields"]
+        return [{"code": code, **dict(zip(fields, row))} for row in content["data"]]
