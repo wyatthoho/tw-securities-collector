@@ -107,64 +107,64 @@ def main():
     listings = crawler.fetch_listings()
     postgres.upload_listings(listings)
 
-    listings = postgres.fetch_listings()
-    listings_count = len(listings)
+    # listings = postgres.fetch_listings()
+    # listings_count = len(listings)
 
-    for idx, listing in enumerate(listings, 1):
-        code = listing["有價證券代號"]
-        birth_date = (
-            datetime.datetime.strptime(
-                listing["公開發行/上市(櫃)/發行日"],
-                "%Y/%m/%d",
-            )
-            .replace(tzinfo=TIMEZONE)
-            .date()
-        )
-        record_date = postgres.get_record_date(code) or TRACEABLE_DATE
-        fetch_date = max(birth_date, record_date, TRACEABLE_DATE)
+    # for idx, listing in enumerate(listings, 1):
+    #     code = listing["有價證券代號"]
+    #     birth_date = (
+    #         datetime.datetime.strptime(
+    #             listing["公開發行/上市(櫃)/發行日"],
+    #             "%Y/%m/%d",
+    #         )
+    #         .replace(tzinfo=TIMEZONE)
+    #         .date()
+    #     )
+    #     record_date = postgres.get_record_date(code) or TRACEABLE_DATE
+    #     fetch_date = max(birth_date, record_date, TRACEABLE_DATE)
 
-        if fetch_date >= TODAY:
-            continue
+    #     if fetch_date >= TODAY:
+    #         continue
 
-        logger.info(f"[{idx}/{listings_count}] Processing {code}")
+    #     logger.info(f"[{idx}/{listings_count}] Processing {code}")
 
-        while fetch_date < TODAY:
-            date_str = fetch_date.strftime("%Y-%m")
-            success = False
+    #     while fetch_date < TODAY:
+    #         date_str = fetch_date.strftime("%Y-%m")
+    #         success = False
 
-            for backoff in FETCH_RETRY_BACKOFF:
-                t0 = time.time()
-                try:
-                    prices = crawler.fetch_daily_prices_by_month(
-                        code=code, date_tgt=fetch_date
-                    )
-                    if not prices:
-                        logger.warning(f"No data returned for {code} in {date_str}")
-                        success = True
-                        break
+    #         for backoff in FETCH_RETRY_BACKOFF:
+    #             t0 = time.time()
+    #             try:
+    #                 prices = crawler.fetch_daily_prices_by_month(
+    #                     code=code, date_tgt=fetch_date
+    #                 )
+    #                 if not prices:
+    #                     logger.warning(f"No data returned for {code} in {date_str}")
+    #                     success = True
+    #                     break
 
-                    postgres.upload_daily_prices(converter.to_daily_rows(prices))
-                    success = True
-                    break
-                except (ResponseError, TWSEHTTPError) as e:
-                    logger.warning(
-                        f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{e}\n"
-                    )
-                    time.sleep(backoff)
-                    continue
-                except Exception as e:
-                    logger.exception(f"Unexpected error for {code} in {date_str}")
-                    break
+    #                 postgres.upload_daily_prices(converter.to_daily_rows(prices))
+    #                 success = True
+    #                 break
+    #             except (ResponseError, TWSEHTTPError) as e:
+    #                 logger.warning(
+    #                     f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{e}\n"
+    #                 )
+    #                 time.sleep(backoff)
+    #                 continue
+    #             except Exception as e:
+    #                 logger.exception(f"Unexpected error for {code} in {date_str}")
+    #                 break
 
-            if not success:
-                logger.error(f"Stopped for {code} in {date_str}")
-                sys.exit(1)
+    #         if not success:
+    #             logger.error(f"Stopped for {code} in {date_str}")
+    #             sys.exit(1)
 
-            fetch_date = next_month(fetch_date)
-            throttle(elapsed=time.time() - t0)
+    #         fetch_date = next_month(fetch_date)
+    #         throttle(elapsed=time.time() - t0)
 
-    postgres.close()
-    logger.info("Pipeline execution completed successfully.")
+    # postgres.close()
+    # logger.info("Pipeline execution completed successfully.")
 
 
 if __name__ == "__main__":

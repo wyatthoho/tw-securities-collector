@@ -1,5 +1,7 @@
 import datetime
 import logging
+import zoneinfo
+from typing import TypedDict
 
 import requests
 from bs4 import BeautifulSoup, ResultSet
@@ -19,9 +21,22 @@ HEADERS_DAILY = {
 }
 
 TABLE_CLASS = "h4"
-COLUMNS_SKIP = ["", "頁面編號"]
 MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
+
+TIMEZONE = zoneinfo.ZoneInfo("Asia/Taipei")
+
+COLUMN_MAPPING_LISTINGS = {
+    "國際證券編碼": "isin_code",
+    "有價證券代號": "security_code",
+    "有價證券名稱": "security_name",
+    "市場別": "market_type",
+    "有價證券別": "security_type",
+    "產業別": "industry_category",
+    "公開發行/上市(櫃)/發行日": "listing_date",
+    "CFICode": "cfi_code",
+    "備 註": "note",
+}
 REQUIRED_FIELDS = {
     "日期",
     "開盤價",
@@ -55,6 +70,18 @@ class ResponseError(Exception):
     """Raised when the response content fails schema/data validation."""
 
 
+class Listing(TypedDict):
+    isin_code: str
+    security_code: str
+    security_name: str
+    market_type: str
+    security_type: str
+    industry_category: str
+    listing_date: datetime.date
+    cfi_code: str
+    note: str
+
+
 class SecurityCrawler:
     def __init__(
         self,
@@ -64,36 +91,54 @@ class SecurityCrawler:
         self.market_filter = market_filter
         self.security_type_filter = security_type_filter
 
-    def _filter_security(self, data: dict[str, str]) -> bool:
-        cond1 = not data["有價證券代號"][-1].isalpha()
-        cond2 = not data["有價證券代號"][0].isalpha()
-        cond3 = data["市場別"] in self.market_filter
-        cond4 = data["有價證券別"] in self.security_type_filter
+    @staticmethod
+    def _parse_date_string(date_string: str):
+        return (
+            datetime.datetime.strptime(
+                date_string,
+                "%Y/%m/%d",
+            )
+            .replace(tzinfo=TIMEZONE)
+            .date()
+        )
+
+    def _check_is_target(self, listing: Listing) -> bool:
+        cond1 = not listing["security_code"][-1].isalpha()
+        cond2 = not listing["security_code"][0].isalpha()
+        cond3 = listing["market_type"] in self.market_filter
+        cond4 = listing["security_type"] in self.security_type_filter
         return all([cond1, cond2, cond3, cond4])
 
-    def _assemble_listings(self, columns: list[str], rows: ResultSet) -> list[dict]:
-        listings_info = []
+    def _assemble_listings(
+        self, columns_twse: list[str], rows: ResultSet
+    ) -> list[Listing]:
+        listings = []
         for row in rows:
-            data_dirty = row.text.split("\n")
-            data_cleaned = {
-                column: content
-                for column, content in zip(columns, data_dirty)
-                if column not in COLUMNS_SKIP
-            }
-            if self._filter_security(data_cleaned):
-                listings_info.append(data_cleaned)
-        return listings_info
+            elements = row.text.split("\n")
 
-    def fetch_listings(self) -> list[dict]:
+            listing = {}
+            for column_twse, element in zip(columns_twse, elements):
+                if column_twse in COLUMN_MAPPING_LISTINGS:
+                    column_db = COLUMN_MAPPING_LISTINGS[column_twse]
+                    if column_db == "listing_date":
+                        element = self._parse_date_string(element)
+
+                    listing[column_db] = element
+
+            if self._check_is_target(listing):
+                listings.append(listing)
+        return listings
+
+    def fetch_listings(self) -> list[Listing]:
         logger.info("Fetching security listings table from TWSE...")
         response = requests.get(URL_FETCH_LISTINGS, headers=HEADERS_LISTING)
         soup = BeautifulSoup(response.text, "html.parser")
 
         table = soup.find("table", class_=TABLE_CLASS)
         first_row = table.find("tr")
-        columns = first_row.text.split("\n")
+        columns_twse = first_row.text.split("\n")
         other_rows = first_row.find_next_siblings("tr")
-        return self._assemble_listings(columns, other_rows)
+        return self._assemble_listings(columns_twse, other_rows)
 
     @staticmethod
     def _send_request(code: str, date_tgt: datetime.date) -> requests.Response:

@@ -4,19 +4,11 @@ import logging
 import psycopg2
 import psycopg2.extras
 
+from collector.security_crawler import Listing
+
 TABLE_NAME_LISTINGS = "listings"
 TABLE_NAME_DAILY = "daily_prices"
-COLUMNS_LISTINGS = [
-    "國際證券編碼",
-    "有價證券代號",
-    "有價證券名稱",
-    "市場別",
-    "有價證券別",
-    "產業別",
-    "公開發行/上市(櫃)/發行日",
-    "CFICode",
-    "備 註",
-]
+
 COLUMNS_DAILY = [
     "code",
     "trade_date",
@@ -40,28 +32,30 @@ class PostgresHandler:
         self.conn.autocommit = True
         logger.info("Connected to PostgreSQL.")
 
-    def upload_listings(self, rows: list[dict]) -> None:
-        if not rows:
+    def upload_listings(self, listings: list[Listing]) -> None:
+        if not listings:
             return
 
-        columns = ", ".join(f'"{col}"' for col in COLUMNS_LISTINGS)
+        columns = ", ".join(f'"{col}"' for col in Listing.__annotations__)
         sql = f"""
             INSERT INTO {TABLE_NAME_LISTINGS} ({columns})
             VALUES %s
-            ON CONFLICT ("有價證券代號") DO NOTHING
+            ON CONFLICT (security_code) DO NOTHING
         """
-        values = [tuple(row[col] for col in COLUMNS_LISTINGS) for row in rows]
+        values = [
+            tuple(listing[col] for col in listing) for listing in listings
+        ]
         with self.conn.cursor() as cur:
             psycopg2.extras.execute_values(cur, sql, values)
 
-        logger.info(f"Synchronized {len(rows)} security listings.")
+        logger.info(f"Synchronized {len(listings)} security listings.")
 
     def fetch_listings(self) -> list[dict]:
-        columns = ", ".join(f'"{col}"' for col in COLUMNS_LISTINGS)
+        columns = ", ".join(f'"{col}"' for col in Listing.__annotations__)
         sql = f"""
             SELECT {columns}
             FROM {TABLE_NAME_LISTINGS}
-            ORDER BY "有價證券代號"
+            ORDER BY security_code
         """
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql)
