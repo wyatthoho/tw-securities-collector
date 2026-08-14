@@ -56,7 +56,7 @@ class PostgresHandler:
             row = cur.fetchone()
         return row[0] if row and row[0] else None
 
-    def upload_daily_prices(self, rows: list[Daily]) -> int:
+    def upload_daily_prices(self, security_code: str, fetch_date_str: str, rows: list[Daily]) -> int:
         if not rows:
             return 0
 
@@ -72,7 +72,7 @@ class PostgresHandler:
             psycopg2.extras.execute_values(cur, sql, values)
             inserted = cur.fetchall()
 
-        logger.info(f"Uploaded {len(inserted)} daily price records.")
+        logger.info(f"Uploaded {len(inserted)} daily price records for {security_code} in {fetch_date_str}.")
         return len(inserted)
 
     def close(self) -> None:

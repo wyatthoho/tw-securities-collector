@@ -70,7 +70,7 @@ def main():
         logger.info(f"[{idx}/{listings_count}] Processing {security_code}")
 
         while fetch_date < TODAY:
-            date_str = fetch_date.strftime("%Y-%m")
+            fetch_date_str = fetch_date.strftime("%Y-%m")
             success = False
 
             for backoff in FETCH_RETRY_BACKOFF:
@@ -79,28 +79,23 @@ def main():
                     prices = crawler.fetch_daily_prices(security_code, fetch_date)
                     if not prices:
                         logger.warning(
-                            f"No data returned for {security_code} in {date_str}"
+                            f"No data returned for {security_code} in {fetch_date_str}"
                         )
                         success = True
                         break
 
-                    postgres.upload_daily_prices(prices)
+                    postgres.upload_daily_prices(security_code, fetch_date_str, prices)
                     success = True
                     break
                 except (ResponseError, TWSEHTTPError) as e:
                     logger.warning(
-                        f"Failed attempt for {security_code} in {date_str}. Backoff: {backoff}.\n\n{e}\n"
+                        f"Failed attempt for {security_code} in {fetch_date_str}. Backoff: {backoff}.\n\n{e}\n"
                     )
                     time.sleep(backoff)
                     continue
-                except Exception as e:
-                    logger.exception(
-                        f"Unexpected error for {security_code} in {date_str}"
-                    )
-                    break
 
             if not success:
-                logger.error(f"Stopped for {security_code} in {date_str}")
+                logger.error(f"Stopped for {security_code} in {fetch_date_str}")
                 sys.exit(1)
 
             fetch_date = next_month(fetch_date)
