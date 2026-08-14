@@ -37,19 +37,18 @@ COLUMN_MAPPING_LISTINGS = {
     "CFICode": "cfi_code",
     "備 註": "note",
 }
-REQUIRED_FIELDS = {
-    "日期",
-    "開盤價",
-    "收盤價",
-    "最低價",
-    "最高價",
-    "成交筆數",
-    "成交股數",
-    "成交金額",
-    "漲跌價差",
-    "註記",
+COLUMN_MAPPING_DAILY = {
+    "日期": "trade_date",
+    "成交股數": "trade_shares",
+    "成交金額": "trade_value",
+    "開盤價": "opening_price",
+    "最高價": "highest_price",
+    "最低價": "lowest_price",
+    "收盤價": "closing_price",
+    "漲跌價差": "price_change",
+    "成交筆數": "trade_count",
+    "註記": "note",
 }
-
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +78,20 @@ class Listing(TypedDict):
     industry_category: str
     listing_date: datetime.date
     cfi_code: str
+    note: str
+
+
+class Daily(TypedDict):
+    security_code: str
+    trade_date: datetime.date
+    trade_shares: int
+    trade_value: int
+    opening_price: float
+    highest_price: float
+    lowest_price: float
+    closing_price: float
+    price_change: str
+    trade_count: int
     note: str
 
 
@@ -141,11 +154,11 @@ class SecurityCrawler:
         return self._assemble_listings(columns_twse, other_rows)
 
     @staticmethod
-    def _send_request(code: str, date_tgt: datetime.date) -> requests.Response:
+    def _send_request(security_code: str, date_tgt: datetime.date) -> requests.Response:
         payload = {
             "response": "json",
             "date": str(date_tgt).replace("-", ""),
-            "stockNo": code,
+            "stockNo": security_code,
         }
 
         with requests.Session() as session:
@@ -178,7 +191,7 @@ class SecurityCrawler:
         if not fields:
             raise ContentError("No fields response.")
 
-        missing_fields = REQUIRED_FIELDS - set(fields)
+        missing_fields = COLUMN_MAPPING_DAILY.keys() - set(fields)
         if missing_fields:
             raise ContentError(f"Missing required fields: {missing_fields}.")
 
@@ -195,10 +208,84 @@ class SecurityCrawler:
                     if (int(y) + 1911, int(m)) != (date_tgt.year, date_tgt.month):
                         raise ContentError("Out of target date.")
 
-    def fetch_daily_prices_by_month(
-        self, code: str, date_tgt: datetime.date
-    ) -> list[dict]:
-        response = self._send_request(code, date_tgt)
+    @staticmethod
+    def _remove_separator(value: str) -> str:
+        return value.replace(",", "")
+
+    @staticmethod
+    def _roc_date_to_date(roc_date: str) -> datetime.date:
+        year, month, day = map(int, roc_date.split("/"))
+        return datetime.datetime(year + 1911, month, day, tzinfo=TIMEZONE).date()
+
+    def _assemble_daily_table(
+        self, security_code: str, columns_twse: list[str], rows: list[list[str]]
+    ) -> list[Daily]:
+        """
+        Converts TWSE raw rows into daily price records keyed by DB column names.
+
+        Notes on excluded fields:
+        - '漲跌價差' (Price Change): Excluded due to non-numeric indicators (+, -, X).
+        'X' denotes ex-dividend/ex-rights days, which breaks direct numeric parsing.
+        Derive from 'closing_price' if historical changes are required.
+        - '註記' (Notes): Omitted because it is missing from certain TWSE API
+        responses, causing KeyErrors. It also holds low quantitative value
+        (used mainly for rare events like stock splits or par value changes).
+        """
+        daily_table = []
+        for elements in rows:
+            daily_row: Daily = {"security_code": security_code}
+
+            # Skip non-trading days (e.g. 0051) where all price fields are "--":
+            # ["日期",       "成交股數", "成交金額", "開盤價", "最高價", "最低價", "收盤價", "漲跌價差", "成交筆數", "註記"]
+            # ["107/03/31",        "0",       "0",     "--",    "--",    "--",     "--",   " 0.00",       "0",     ""]
+            (
+                trade_date,
+                trade_share,
+                trade_value,
+                opening_price,
+                highest_price,
+                lowest_price,
+                closing_price,
+                price_change,
+                trade_count,
+                note,
+            ) = elements
+            if opening_price == closing_price == lowest_price == highest_price == "--":
+                date = self._roc_date_to_date(trade_date)
+                msg = f"Skipping non-trading day for {security_code} on {date}"
+                logger.warning(msg)
+                continue
+
+            for column_twse, element in zip(columns_twse, elements):
+                column_db = COLUMN_MAPPING_DAILY[column_twse]
+
+                if column_db in [
+                    "opening_price",
+                    "closing_price",
+                    "lowest_price",
+                    "highest_price",
+                ]:
+                    element = float(self._remove_separator(element))
+
+                elif column_db in [
+                    "trade_count",
+                    "trade_shares",
+                    "trade_value",
+                ]:
+                    element = int(self._remove_separator(element))
+
+                elif column_db == "trade_date":
+                    element = self._roc_date_to_date(element)
+
+                daily_row[column_db] = element
+
+            daily_table.append(daily_row)
+        return daily_table
+
+    def fetch_daily_prices(
+        self, security_code: str, date_tgt: datetime.date
+    ) -> list[Daily]:
+        response = self._send_request(security_code, date_tgt)
 
         # Example request URL:
         # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
@@ -223,5 +310,6 @@ class SecurityCrawler:
         except ContentError as e:
             raise ResponseError(f"{e}\nURL: {url}\nContent: {content}")
 
-        fields = content["fields"]
-        return [{"code": code, **dict(zip(fields, row))} for row in content["data"]]
+        columns_twse = content["fields"]
+        rows = content["data"]
+        return self._assemble_daily_table(security_code, columns_twse, rows)
