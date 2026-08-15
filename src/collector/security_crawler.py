@@ -7,12 +7,11 @@ import requests
 from bs4 import BeautifulSoup, ResultSet
 
 URL_PAGE = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
-URL_FETCH_LISTINGS = "https://isin.twse.com.tw/isin/single_main.jsp?"
-URL_FETCH_DAILY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
-
+URL_FETCH_SECURITIES = "https://isin.twse.com.tw/isin/single_main.jsp?"
+URL_FETCH_DAILY_BARS = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
 USER_AGENT = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
-HEADERS_LISTING = {"user-agent": USER_AGENT}
-HEADERS_DAILY = {
+HEADERS_SECURITIES = {"user-agent": USER_AGENT}
+HEADERS_DAILY_BARS = {
     "user-agent": USER_AGENT,
     "Referer": URL_PAGE,
     "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -23,10 +22,9 @@ HEADERS_DAILY = {
 TABLE_CLASS = "h4"
 MARKET_FILTER = ["上市"]
 SECURITY_TYPE_FILTER = ["ETF", "股票"]
-
 TIMEZONE = zoneinfo.ZoneInfo("Asia/Taipei")
 
-COLUMN_MAPPING_LISTINGS = {
+COLUMN_MAPPING_SECURITIES = {
     "國際證券編碼": "isin_code",
     "有價證券代號": "security_code",
     "有價證券名稱": "security_name",
@@ -37,7 +35,7 @@ COLUMN_MAPPING_LISTINGS = {
     "CFICode": "cfi_code",
     "備 註": "note",
 }
-COLUMN_MAPPING_DAILY = {
+COLUMN_MAPPING_DAILY_BARS = {
     "日期": "trade_date",
     "成交股數": "trade_shares",
     "成交金額": "trade_value",
@@ -69,7 +67,7 @@ class ResponseError(Exception):
     """Raised when the response content fails schema/data validation."""
 
 
-class Listing(TypedDict):
+class Security(TypedDict):
     isin_code: str
     security_code: str
     security_name: str
@@ -81,7 +79,7 @@ class Listing(TypedDict):
     note: str
 
 
-class Daily(TypedDict):
+class DailyBar(TypedDict):
     security_code: str
     trade_date: datetime.date
     trade_shares: int
@@ -115,43 +113,43 @@ class SecurityCrawler:
             .date()
         )
 
-    def _check_is_target(self, listing: Listing) -> bool:
-        cond1 = not listing["security_code"][-1].isalpha()
-        cond2 = not listing["security_code"][0].isalpha()
-        cond3 = listing["market_type"] in self.market_filter
-        cond4 = listing["security_type"] in self.security_type_filter
+    def _check_is_target(self, security: Security) -> bool:
+        cond1 = not security["security_code"][-1].isalpha()
+        cond2 = not security["security_code"][0].isalpha()
+        cond3 = security["market_type"] in self.market_filter
+        cond4 = security["security_type"] in self.security_type_filter
         return all([cond1, cond2, cond3, cond4])
 
-    def _assemble_listings(
+    def _assemble_securities(
         self, columns_twse: list[str], rows: ResultSet
-    ) -> list[Listing]:
-        listings = []
+    ) -> list[Security]:
+        securities = []
         for row in rows:
             elements = row.text.split("\n")
 
-            listing = {}
+            security = {}
             for column_twse, element in zip(columns_twse, elements):
-                if column_twse in COLUMN_MAPPING_LISTINGS:
-                    column_db = COLUMN_MAPPING_LISTINGS[column_twse]
+                if column_twse in COLUMN_MAPPING_SECURITIES:
+                    column_db = COLUMN_MAPPING_SECURITIES[column_twse]
                     if column_db == "listing_date":
                         element = self._parse_date_string(element)
 
-                    listing[column_db] = element
+                    security[column_db] = element
 
-            if self._check_is_target(listing):
-                listings.append(listing)
-        return listings
+            if self._check_is_target(security):
+                securities.append(security)
+        return securities
 
-    def fetch_listings(self) -> list[Listing]:
-        logger.info("Fetching security listings table from TWSE...")
-        response = requests.get(URL_FETCH_LISTINGS, headers=HEADERS_LISTING)
+    def fetch_securities(self) -> list[Security]:
+        logger.info("Fetching securities from TWSE...")
+        response = requests.get(URL_FETCH_SECURITIES, headers=HEADERS_SECURITIES)
         soup = BeautifulSoup(response.text, "html.parser")
 
         table = soup.find("table", class_=TABLE_CLASS)
         first_row = table.find("tr")
         columns_twse = first_row.text.split("\n")
         other_rows = first_row.find_next_siblings("tr")
-        return self._assemble_listings(columns_twse, other_rows)
+        return self._assemble_securities(columns_twse, other_rows)
 
     @staticmethod
     def _send_request(security_code: str, date_tgt: datetime.date) -> requests.Response:
@@ -163,13 +161,13 @@ class SecurityCrawler:
 
         with requests.Session() as session:
             try:
-                session.get(url=URL_PAGE, headers=HEADERS_DAILY)
+                session.get(url=URL_PAGE, headers=HEADERS_DAILY_BARS)
             except Exception as e:
                 raise VisitPageError(f"Initialize session failed: {e}") from e
 
             try:
                 response = session.get(
-                    url=URL_FETCH_DAILY, params=payload, headers=HEADERS_DAILY
+                    url=URL_FETCH_DAILY_BARS, params=payload, headers=HEADERS_DAILY_BARS
                 )
                 response.raise_for_status()
             except requests.exceptions.HTTPError as e:
@@ -191,7 +189,7 @@ class SecurityCrawler:
         if not fields:
             raise ContentError("No fields response.")
 
-        missing_fields = COLUMN_MAPPING_DAILY.keys() - set(fields)
+        missing_fields = COLUMN_MAPPING_DAILY_BARS.keys() - set(fields)
         if missing_fields:
             raise ContentError(f"Missing required fields: {missing_fields}.")
 
@@ -217,11 +215,11 @@ class SecurityCrawler:
         year, month, day = map(int, roc_date.split("/"))
         return datetime.datetime(year + 1911, month, day, tzinfo=TIMEZONE).date()
 
-    def _assemble_daily_table(
+    def _assemble_daily_bars(
         self, security_code: str, columns_twse: list[str], rows: list[list[str]]
-    ) -> list[Daily]:
+    ) -> list[DailyBar]:
         """
-        Converts TWSE raw rows into daily price records keyed by DB column names.
+        Converts TWSE raw rows into daily bars keyed by DB column names.
 
         Notes on excluded fields:
         - '漲跌價差' (Price Change): Excluded due to non-numeric indicators (+, -, X).
@@ -231,9 +229,9 @@ class SecurityCrawler:
         responses, causing KeyErrors. It also holds low quantitative value
         (used mainly for rare events like stock splits or par value changes).
         """
-        daily_table = []
+        daily_bars = []
         for elements in rows:
-            daily_row: Daily = {"security_code": security_code}
+            daily_bar: DailyBar = {"security_code": security_code}
 
             # Skip non-trading days (e.g. 0051) where all price fields are "--":
             # ["日期",       "成交股數", "成交金額", "開盤價", "最高價", "最低價", "收盤價", "漲跌價差", "成交筆數", "註記"]
@@ -257,7 +255,7 @@ class SecurityCrawler:
                 continue
 
             for column_twse, element in zip(columns_twse, elements):
-                column_db = COLUMN_MAPPING_DAILY[column_twse]
+                column_db = COLUMN_MAPPING_DAILY_BARS[column_twse]
 
                 if column_db in [
                     "opening_price",
@@ -277,14 +275,14 @@ class SecurityCrawler:
                 elif column_db == "trade_date":
                     element = self._roc_date_to_date(element)
 
-                daily_row[column_db] = element
+                daily_bar[column_db] = element
 
-            daily_table.append(daily_row)
-        return daily_table
+            daily_bars.append(daily_bar)
+        return daily_bars
 
-    def fetch_daily_prices(
+    def fetch_daily_bars(
         self, security_code: str, date_tgt: datetime.date
-    ) -> list[Daily]:
+    ) -> list[DailyBar]:
         response = self._send_request(security_code, date_tgt)
 
         # Example request URL:
@@ -312,4 +310,4 @@ class SecurityCrawler:
 
         columns_twse = content["fields"]
         rows = content["data"]
-        return self._assemble_daily_table(security_code, columns_twse, rows)
+        return self._assemble_daily_bars(security_code, columns_twse, rows)

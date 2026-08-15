@@ -51,23 +51,23 @@ def main():
     postgres = PostgresHandler(url=POSTGRES_URL)
     crawler = SecurityCrawler()
 
-    # Fetch and sync listings
-    listings = crawler.fetch_listings()
-    postgres.upload_listings(listings)
+    # Fetch and sync securities
+    securities = crawler.fetch_securities()
+    postgres.upload_securities(securities)
 
-    listings = postgres.fetch_listings()
-    listings_count = len(listings)
+    securities = postgres.fetch_securities()
+    securities_count = len(securities)
 
-    for idx, listing in enumerate(listings, 1):
-        security_code = listing["security_code"]
-        listing_date = listing["listing_date"]
+    for idx, security in enumerate(securities, 1):
+        security_code = security["security_code"]
+        listing_date = security["listing_date"]
         record_date = postgres.get_record_date(security_code) or TRACEABLE_DATE
         fetch_date = max(listing_date, record_date, TRACEABLE_DATE)
 
         if fetch_date >= TODAY:
             continue
 
-        logger.info(f"[{idx}/{listings_count}] Processing {security_code}")
+        logger.info(f"[{idx}/{securities_count}] Processing {security_code}")
 
         while fetch_date < TODAY:
             fetch_date_str = fetch_date.strftime("%Y-%m")
@@ -76,15 +76,17 @@ def main():
             for backoff in FETCH_RETRY_BACKOFF:
                 t0 = time.time()
                 try:
-                    prices = crawler.fetch_daily_prices(security_code, fetch_date)
-                    if not prices:
+                    daily_bars = crawler.fetch_daily_bars(security_code, fetch_date)
+                    if not daily_bars:
                         logger.warning(
                             f"No data returned for {security_code} in {fetch_date_str}"
                         )
                         success = True
                         break
 
-                    postgres.upload_daily_prices(security_code, fetch_date_str, prices)
+                    postgres.upload_daily_bars(
+                        security_code, fetch_date_str, daily_bars
+                    )
                     success = True
                     break
                 except (ResponseError, TWSEHTTPError) as e:
