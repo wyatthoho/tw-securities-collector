@@ -3,6 +3,7 @@ import logging
 
 import psycopg2
 import psycopg2.extras
+from psycopg2 import InterfaceError, OperationalError
 
 from collector.security_crawler import DailyBar, Security
 
@@ -12,11 +13,25 @@ TABLE_DAILY_BARS = "daily_bars"
 logger = logging.getLogger(__name__)
 
 
+class PostgresConnectionError(Exception):
+    """Raised when the PostgreSQL connection drops and cannot serve the request."""
+
+
 class PostgresHandler:
     def __init__(self, url: str):
+        self.url = url
         self.conn = psycopg2.connect(url)
         self.conn.autocommit = True
         logger.info("Connected to PostgreSQL.")
+
+    def reconnect(self) -> None:
+        try:
+            self.conn.close()
+        except psycopg2.Error as e:
+            logger.debug(f"Ignoring error while closing broken connection: {e}")
+        self.conn = psycopg2.connect(self.url)
+        self.conn.autocommit = True
+        logger.info("Reconnected to PostgreSQL.")
 
     def upload_securities(self, securities: list[Security]) -> None:
         if not securities:
@@ -72,9 +87,14 @@ class PostgresHandler:
         values = [
             tuple(daily_bar[col] for col in daily_bar) for daily_bar in daily_bars
         ]
-        with self.conn.cursor() as cur:
-            psycopg2.extras.execute_values(cur, sql, values)
-            inserted = cur.fetchall()
+
+        try:
+            with self.conn.cursor() as cur:
+                psycopg2.extras.execute_values(cur, sql, values)
+                inserted = cur.fetchall()
+        except (OperationalError, InterfaceError) as e:
+            self.reconnect()
+            raise PostgresConnectionError(f"{e}") from e
 
         logger.info(
             f"Uploaded {len(inserted)} daily bars for {security_code} in {fetch_date_str}."

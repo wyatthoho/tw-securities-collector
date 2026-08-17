@@ -8,7 +8,7 @@ import zoneinfo
 
 from dotenv import load_dotenv
 
-from collector.postgres_handler import PostgresHandler
+from collector.postgres_handler import PostgresConnectionError, PostgresHandler
 from collector.security_crawler import ResponseError, SecurityCrawler, TWSEHTTPError
 
 load_dotenv()
@@ -25,8 +25,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout,
-    encoding="utf-8",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("run.log", encoding="utf-8"),
+    ],
 )
 
 logger = logging.getLogger(__name__)
@@ -92,6 +94,12 @@ def main():
                 except (ResponseError, TWSEHTTPError) as e:
                     logger.warning(
                         f"Failed attempt for {security_code} in {fetch_date_str}. Backoff: {backoff}.\n\n{e}\n"
+                    )
+                    time.sleep(backoff)
+                    continue
+                except PostgresConnectionError as e:
+                    logger.warning(
+                        f"Postgres DB connection error. Backoff: {backoff}.\n\n{e}\n"
                     )
                     time.sleep(backoff)
                     continue
