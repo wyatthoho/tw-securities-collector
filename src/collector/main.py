@@ -98,11 +98,8 @@ def main():
                     time.sleep(backoff)
                     continue
                 except PostgresConnectionError as e:
-                    logger.warning(
-                        f"Postgres DB connection error. Backoff: {backoff}.\n\n{e}\n"
-                    )
-                    time.sleep(backoff)
-                    continue
+                    logger.warning(f"Postgres DB connection error.\n\n{e}\n")
+                    break
 
             if not success:
                 logger.error(f"Stopped for {security_code} in {fetch_date_str}")
