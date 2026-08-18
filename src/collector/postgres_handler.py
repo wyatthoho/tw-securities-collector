@@ -32,14 +32,13 @@ def with_retry[T](func: Callable[..., T]) -> Callable[..., T]:
                 return func(self, *args, **kwargs)
             except (OperationalError, InterfaceError) as e:
                 last_error = e
-                logger.warning(
-                    f"Postgres connection error (attempt {attempt}/{MAX_CONNECTION_ATTEMPTS}): {e}"
-                )
+                logger.warning(f"Postgres connection error: {e}")
 
             if attempt == MAX_CONNECTION_ATTEMPTS:
                 break
 
             time.sleep(CONNECTION_RETRY_BACKOFF_SECONDS)
+            logger.info(f"Reconnecting to PostgreSQL (attempt {attempt}/{MAX_CONNECTION_ATTEMPTS})...")
             try:
                 self.reconnect()
             except (OperationalError, InterfaceError) as e:

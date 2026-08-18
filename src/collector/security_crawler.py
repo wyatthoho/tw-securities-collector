@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup, ResultSet
 URL_PAGE = "https://www.twse.com.tw/zh/trading/historical/stock-day.html"
 URL_FETCH_SECURITIES = "https://isin.twse.com.tw/isin/single_main.jsp?"
 URL_FETCH_DAILY_BARS = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+URL_INDEX_REDIRECT = "https://www.twse.com.tw/zh/index.html"
 USER_AGENT = "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Mobile Safari/537.36"
 HEADERS_SECURITIES = {"user-agent": USER_AGENT}
 HEADERS_DAILY_BARS = {
@@ -288,6 +289,11 @@ class SecurityCrawler:
         # Example request URL:
         # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
         url: str = response.url
+
+        if url == URL_INDEX_REDIRECT:
+            raise ResponseError(
+                f"Redirected to homepage, likely rate-limited or blocked by the server.\nURL: {url}"
+            )
 
         try:
             content: dict = response.json()
