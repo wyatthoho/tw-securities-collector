@@ -80,6 +80,19 @@ class Security(TypedDict):
     note: str
 
 
+class RawBar(TypedDict, total=False):
+    trade_date: str
+    trade_shares: str
+    trade_value: str
+    opening_price: str
+    highest_price: str
+    lowest_price: str
+    closing_price: str
+    price_change: str
+    trade_count: str
+    note: str
+
+
 class DailyBar(TypedDict):
     security_code: str
     trade_date: datetime.date
@@ -222,62 +235,56 @@ class SecurityCrawler:
         """
         Converts TWSE raw rows into daily bars keyed by DB column names.
 
-        Notes on excluded fields:
-        - '漲跌價差' (Price Change): Excluded due to non-numeric indicators (+, -, X).
-        'X' denotes ex-dividend/ex-rights days, which breaks direct numeric parsing.
-        Derive from 'closing_price' if historical changes are required.
-        - '註記' (Notes): Omitted because it is missing from certain TWSE API
-        responses, causing KeyErrors. It also holds low quantitative value
-        (used mainly for rare events like stock splits or par value changes).
+        Price change is kept as the raw string rather than parsed to a
+        number, since it can contain non-numeric indicators (+, -, X);
+        'X' denotes ex-dividend/ex-rights days. Derive from 'closing_price'
+        if historical changes are required.
+
+        Non-trading days (e.g. 0051), where all price fields are "--",
+        are skipped.
         """
+
         daily_bars = []
         for elements in rows:
-            daily_bar: DailyBar = {"security_code": security_code}
+            raw_bar: RawBar = {}
+            for column_twse, element in zip(columns_twse, elements):
+                column_db = COLUMN_MAPPING_DAILY_BARS[column_twse]
+                raw_bar[column_db] = element
 
-            # Skip non-trading days (e.g. 0051) where all price fields are "--":
-            # ["日期",       "成交股數", "成交金額", "開盤價", "最高價", "最低價", "收盤價", "漲跌價差", "成交筆數", "註記"]
-            # ["107/03/31",        "0",       "0",     "--",    "--",    "--",     "--",   " 0.00",       "0",     ""]
-            (
-                trade_date,
-                trade_share,
-                trade_value,
-                opening_price,
-                highest_price,
-                lowest_price,
-                closing_price,
-                price_change,
-                trade_count,
-                note,
-            ) = elements
-            if opening_price == closing_price == lowest_price == highest_price == "--":
-                date = self._roc_date_to_date(trade_date)
-                msg = f"Skipping non-trading day for {security_code} on {date}"
+            trade_date = self._roc_date_to_date(raw_bar["trade_date"])
+
+            if (
+                raw_bar["opening_price"]
+                == raw_bar["highest_price"]
+                == raw_bar["lowest_price"]
+                == raw_bar["closing_price"]
+                == "--"
+            ):
+                msg = f"Skipping non-trading day for {security_code} on {trade_date}"
                 logger.warning(msg)
                 continue
 
-            for column_twse, element in zip(columns_twse, elements):
-                column_db = COLUMN_MAPPING_DAILY_BARS[column_twse]
+            opening_price = float(self._remove_separator(raw_bar["opening_price"]))
+            highest_price = float(self._remove_separator(raw_bar["highest_price"]))
+            lowest_price = float(self._remove_separator(raw_bar["lowest_price"]))
+            closing_price = float(self._remove_separator(raw_bar["closing_price"]))
+            trade_count = int(self._remove_separator(raw_bar["trade_count"]))
+            trade_shares = int(self._remove_separator(raw_bar["trade_shares"]))
+            trade_value = int(self._remove_separator(raw_bar["trade_value"]))
 
-                if column_db in [
-                    "opening_price",
-                    "closing_price",
-                    "lowest_price",
-                    "highest_price",
-                ]:
-                    element = float(self._remove_separator(element))
-
-                elif column_db in [
-                    "trade_count",
-                    "trade_shares",
-                    "trade_value",
-                ]:
-                    element = int(self._remove_separator(element))
-
-                elif column_db == "trade_date":
-                    element = self._roc_date_to_date(element)
-
-                daily_bar[column_db] = element
-
+            daily_bar: DailyBar = {
+                "security_code": security_code,
+                "trade_date": trade_date,
+                "trade_shares": trade_shares,
+                "trade_value": trade_value,
+                "opening_price": opening_price,
+                "highest_price": highest_price,
+                "lowest_price": lowest_price,
+                "closing_price": closing_price,
+                "price_change": raw_bar["price_change"],
+                "trade_count": trade_count,
+                "note": raw_bar["note"],
+            }
             daily_bars.append(daily_bar)
         return daily_bars
 
