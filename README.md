@@ -25,3 +25,9 @@ POSTGRES_URL=postgresql://user:password@host:port/dbname
 ```bash
 collector
 ```
+
+## GitHub Actions
+
+Runs daily via [.github/workflows/main.yml](.github/workflows/main.yml). Add `POSTGRES_URL` as a repository secret:
+
+Settings > Secrets and variables > Actions > New repository secret
