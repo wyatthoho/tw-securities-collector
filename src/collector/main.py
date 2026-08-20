@@ -83,15 +83,21 @@ def main():
                     success = True
                     break
 
-                postgres.upload_daily_bars(security_code, fetch_date_str, daily_bars)
+                inserted_count = postgres.upload_daily_bars(daily_bars)
+                logger.info(
+                    f"Uploaded {inserted_count} daily bars for {security_code} in {fetch_date_str}."
+                )
+
                 success = True
             except FetchDailyBarsError as e:
                 logger.error(
-                    f"Failed for {security_code} in {fetch_date_str}.\n\n{e}\n"
+                    f"Failed to fetch daily bars for {security_code} in {fetch_date_str}.\n\n{e}\n"
                 )
                 break
             except PostgresConnectionError as e:
-                logger.error(f"Postgres connection error.\n\n{e}\n")
+                logger.error(
+                    f"Postgres connection error while processing {security_code} in {fetch_date_str}.\n\n{e}\n"
+                )
                 break
 
             fetch_date = next_month(fetch_date)

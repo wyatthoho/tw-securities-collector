@@ -38,7 +38,9 @@ def with_retry[T](func: Callable[..., T]) -> Callable[..., T]:
                 break
 
             time.sleep(BACKOFF_SECONDS)
-            logger.info(f"Reconnecting to PostgreSQL (attempt {attempt}/{MAX_ATTEMPTS})...")
+            logger.info(
+                f"Reconnecting to PostgreSQL (attempt {attempt}/{MAX_ATTEMPTS})..."
+            )
             try:
                 self.reconnect()
             except (OperationalError, InterfaceError) as e:
@@ -110,9 +112,7 @@ class PostgresHandler:
         return row[0] if row and row[0] else None
 
     @with_retry
-    def upload_daily_bars(
-        self, security_code: str, fetch_date_str: str, daily_bars: list[DailyBar]
-    ) -> int:
+    def upload_daily_bars(self, daily_bars: list[DailyBar]) -> int:
         if not daily_bars:
             return 0
 
@@ -131,9 +131,6 @@ class PostgresHandler:
             psycopg2.extras.execute_values(cur, sql, values)
             inserted = cur.fetchall()
 
-        logger.info(
-            f"Uploaded {len(inserted)} daily bars for {security_code} in {fetch_date_str}."
-        )
         return len(inserted)
 
     def close(self) -> None:

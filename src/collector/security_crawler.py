@@ -148,7 +148,7 @@ class SecurityCrawler:
     ):
         self.market_filter = market_filter
         self.security_type_filter = security_type_filter
-        logger.info("Initialized SecurityCrawler")
+        logger.info("Initialized SecurityCrawler.")
 
     @staticmethod
     def _parse_date_string(date_string: str):
