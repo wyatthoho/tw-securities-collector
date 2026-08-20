@@ -1,6 +1,9 @@
 import datetime
+import functools
 import logging
+import time
 import zoneinfo
+from collections.abc import Callable
 from typing import TypedDict
 
 import requests
@@ -49,7 +52,37 @@ COLUMN_MAPPING_DAILY_BARS = {
     "註記": "note",
 }
 
+MAX_ATTEMPTS = 5
+BACKOFF_SECONDS = 360
+
 logger = logging.getLogger(__name__)
+
+
+def with_retry[T](func: Callable[..., T]) -> Callable[..., T]:
+    @functools.wraps(func)
+    def wrapper(self: "SecurityCrawler", *args, **kwargs) -> T:
+        last_error: Exception | None = None
+
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                return func(self, *args, **kwargs)
+            except ResponseError as e:
+                last_error = e
+                logger.warning(f"Got invalid daily response: {e}")
+            except (TWSEHTTPError, VisitPageError) as e:
+                last_error = e
+                logger.warning(f"Send daily request failed: {e}")
+
+            if attempt == MAX_ATTEMPTS:
+                break
+
+            logger.info(f"Sleeping for {BACKOFF_SECONDS} seconds...")
+            time.sleep(BACKOFF_SECONDS)
+            logger.info(f"Retrying (attempt {attempt}/{MAX_ATTEMPTS})...")
+
+        raise FetchDailyBarsError(f"{last_error}") from last_error
+
+    return wrapper
 
 
 class VisitPageError(Exception):
@@ -60,12 +93,12 @@ class TWSEHTTPError(Exception):
     """Raised when a HTTP error."""
 
 
-class ContentError(Exception):
-    """Raised when the response content fails validation checks."""
-
-
 class ResponseError(Exception):
     """Raised when the response content fails schema/data validation."""
+
+
+class FetchDailyBarsError(Exception):
+    """Raised when fetching daily bars fails after exhausting all retry attempts."""
 
 
 class Security(TypedDict):
@@ -115,6 +148,7 @@ class SecurityCrawler:
     ):
         self.market_filter = market_filter
         self.security_type_filter = security_type_filter
+        logger.info("Initialized SecurityCrawler")
 
     @staticmethod
     def _parse_date_string(date_string: str):
@@ -166,7 +200,9 @@ class SecurityCrawler:
         return self._assemble_securities(columns_twse, other_rows)
 
     @staticmethod
-    def _send_request(security_code: str, date_tgt: datetime.date) -> requests.Response:
+    def _send_daily_request(
+        security_code: str, date_tgt: datetime.date
+    ) -> requests.Response:
         payload = {
             "response": "json",
             "date": str(date_tgt).replace("-", ""),
@@ -191,34 +227,34 @@ class SecurityCrawler:
     @staticmethod
     def _examine_response_content(content: dict, date_tgt: datetime.date) -> None:
         if content == {"stat": "查詢日期大於今日，請重新查詢!", "total": 0}:
-            raise ContentError("Request may be blocked by the server.")
+            raise ResponseError("The query date is later than today.")
 
         if content == {"stat": "查詢日期小於99年1月4日，請重新查詢!", "total": 0}:
-            raise ContentError("Request may be blocked by the server.")
+            raise ResponseError("The query date is earlier than 1910/1/4.")
 
         if content.get("stat") != "OK":
-            raise ContentError("Response stat is not OK.")
+            raise ResponseError("Response stat is not OK.")
 
         fields = content.get("fields")
         if not fields:
-            raise ContentError("No fields response.")
+            raise ResponseError("No fields response.")
 
         missing_fields = COLUMN_MAPPING_DAILY_BARS.keys() - set(fields)
         if missing_fields:
-            raise ContentError(f"Missing required fields: {missing_fields}.")
+            raise ResponseError(f"Missing required fields: {missing_fields}.")
 
         data = content.get("data")
         if not data:
-            raise ContentError("No data response.")
+            raise ResponseError("No data response.")
 
         for row in data:
             for idx, ele in enumerate(row):
                 if ele is None:
-                    raise ContentError("Data containing NULL.")
+                    raise ResponseError("Data containing NULL.")
                 if idx == 0:
                     y, m, _ = ele.split("/")
                     if (int(y) + 1911, int(m)) != (date_tgt.year, date_tgt.month):
-                        raise ContentError("Out of target date.")
+                        raise ResponseError("Out of target date.")
 
     @staticmethod
     def _remove_separator(value: str) -> str:
@@ -288,38 +324,34 @@ class SecurityCrawler:
             daily_bars.append(daily_bar)
         return daily_bars
 
+    @with_retry
     def fetch_daily_bars(
         self, security_code: str, date_tgt: datetime.date
     ) -> list[DailyBar]:
-        response = self._send_request(security_code, date_tgt)
+        """Fetch one month of daily bars for a security from TWSE.
 
-        # Example request URL:
-        # https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
-        url: str = response.url
+        Example request URL:
+        https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=20160101&stockNo=0050
 
-        if url == URL_INDEX_REDIRECT:
-            raise ResponseError(
-                f"Redirected to homepage, likely rate-limited or blocked by the server.\nURL: {url}"
-            )
+        The API returns {"stat": "很抱歉，沒有符合條件的資料!", "total": 0} when there's no
+        data for the requested month (e.g. stock 1213 has no data from 2019-05 to 2019-09,
+        then resumes trading). This is treated as a valid "no data" case, returning an empty
+        list instead of raising an error.
+        """
+        response = self._send_daily_request(security_code, date_tgt)
+
+        if response.url == URL_INDEX_REDIRECT:
+            raise ResponseError("Redirected to homepage.")
 
         try:
             content: dict = response.json()
         except ValueError as e:
-            raise ResponseError(
-                f"Invalid JSON response: {e}\nURL: {url}\nBody: {response.text!r}"
-            )
+            raise ResponseError(f"Invalid JSON response: {e}\nBody: {response.text!r}")
 
-        # The API returns this response when there's no data for the requested month.
-        # e.g. stock 1213 has no data from 2019-05 to 2019-09, then resumes trading.
-        # Treat this as a valid "no data" case and return an empty list
-        # instead of raising an error.
         if content == {"stat": "很抱歉，沒有符合條件的資料!", "total": 0}:
             return []
 
-        try:
-            self._examine_response_content(content, date_tgt)
-        except ContentError as e:
-            raise ResponseError(f"{e}\nURL: {url}\nContent: {content}")
+        self._examine_response_content(content, date_tgt)
 
         columns_twse = content["fields"]
         rows = content["data"]

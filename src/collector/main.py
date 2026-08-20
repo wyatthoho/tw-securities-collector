@@ -9,7 +9,7 @@ import zoneinfo
 from dotenv import load_dotenv
 
 from collector.postgres_handler import PostgresConnectionError, PostgresHandler
-from collector.security_crawler import ResponseError, SecurityCrawler, TWSEHTTPError
+from collector.security_crawler import FetchDailyBarsError, SecurityCrawler
 
 load_dotenv()
 POSTGRES_URL = os.environ.get("POSTGRES_URL")
@@ -18,7 +18,6 @@ TIMEZONE = zoneinfo.ZoneInfo("Asia/Taipei")
 TODAY = datetime.datetime.now(tz=TIMEZONE).date()
 MIN_CYCLE_SECONDS = 7
 MAX_CYCLE_SECONDS = 14
-FETCH_RETRY_BACKOFF = [360, 360, 360, 360, 360]
 
 
 logging.basicConfig(
@@ -49,17 +48,16 @@ def throttle(elapsed: float) -> None:
 
 def main():
     logger.info("Initializing Taiwan stock crawling pipeline...")
-
-    postgres = PostgresHandler(url=POSTGRES_URL)
     crawler = SecurityCrawler()
+    postgres = PostgresHandler(url=POSTGRES_URL)
 
-    # Fetch and sync securities
+    # Fetch and upload securities
     securities = crawler.fetch_securities()
     postgres.upload_securities(securities)
 
+    # Fetch and upload daily bars
     securities = postgres.fetch_securities()
     securities_count = len(securities)
-
     for idx, security in enumerate(securities, 1):
         security_code = security["security_code"]
         listing_date = security["listing_date"]
@@ -73,40 +71,36 @@ def main():
 
         while fetch_date < TODAY:
             fetch_date_str = fetch_date.strftime("%Y-%m")
+            t0 = time.time()
             success = False
 
-            for backoff in FETCH_RETRY_BACKOFF:
-                t0 = time.time()
-                try:
-                    daily_bars = crawler.fetch_daily_bars(security_code, fetch_date)
-                    if not daily_bars:
-                        logger.warning(
-                            f"No data returned for {security_code} in {fetch_date_str}"
-                        )
-                        success = True
-                        break
-
-                    postgres.upload_daily_bars(
-                        security_code, fetch_date_str, daily_bars
+            try:
+                daily_bars = crawler.fetch_daily_bars(security_code, fetch_date)
+                if not daily_bars:
+                    logger.warning(
+                        f"No data returned for {security_code} in {fetch_date_str}"
                     )
                     success = True
                     break
-                except (ResponseError, TWSEHTTPError) as e:
-                    logger.warning(
-                        f"Failed attempt for {security_code} in {fetch_date_str}. Backoff: {backoff}.\n\n{e}\n"
-                    )
-                    time.sleep(backoff)
-                    continue
-                except PostgresConnectionError as e:
-                    logger.warning(f"Postgres DB connection error.\n\n{e}\n")
-                    break
 
-            if not success:
-                logger.error(f"Stopped for {security_code} in {fetch_date_str}")
-                sys.exit(1)
+                postgres.upload_daily_bars(security_code, fetch_date_str, daily_bars)
+                success = True
+            except FetchDailyBarsError as e:
+                logger.error(
+                    f"Failed for {security_code} in {fetch_date_str}.\n\n{e}\n"
+                )
+                break
+            except PostgresConnectionError as e:
+                logger.error(f"Postgres connection error.\n\n{e}\n")
+                break
 
             fetch_date = next_month(fetch_date)
             throttle(elapsed=time.time() - t0)
+
+        if not success:
+            logger.info("Aborting pipeline...")
+            postgres.close()
+            sys.exit(1)
 
     postgres.close()
     logger.info("Pipeline execution completed successfully.")

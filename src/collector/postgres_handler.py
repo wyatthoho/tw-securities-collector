@@ -12,8 +12,8 @@ from collector.security_crawler import DailyBar, Security
 
 TABLE_SECURITIES = "securities"
 TABLE_DAILY_BARS = "daily_bars"
-MAX_CONNECTION_ATTEMPTS = 5
-CONNECTION_RETRY_BACKOFF_SECONDS = 3
+MAX_ATTEMPTS = 5
+BACKOFF_SECONDS = 3
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +27,18 @@ def with_retry[T](func: Callable[..., T]) -> Callable[..., T]:
     def wrapper(self: "PostgresHandler", *args, **kwargs) -> T:
         last_error: Exception | None = None
 
-        for attempt in range(1, MAX_CONNECTION_ATTEMPTS + 1):
+        for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 return func(self, *args, **kwargs)
             except (OperationalError, InterfaceError) as e:
                 last_error = e
                 logger.warning(f"Postgres connection error: {e}")
 
-            if attempt == MAX_CONNECTION_ATTEMPTS:
+            if attempt == MAX_ATTEMPTS:
                 break
 
-            time.sleep(CONNECTION_RETRY_BACKOFF_SECONDS)
-            logger.info(f"Reconnecting to PostgreSQL (attempt {attempt}/{MAX_CONNECTION_ATTEMPTS})...")
+            time.sleep(BACKOFF_SECONDS)
+            logger.info(f"Reconnecting to PostgreSQL (attempt {attempt}/{MAX_ATTEMPTS})...")
             try:
                 self.reconnect()
             except (OperationalError, InterfaceError) as e:
@@ -86,6 +86,7 @@ class PostgresHandler:
 
     @with_retry
     def fetch_securities(self) -> list[Security]:
+        logger.info("Fetching securities from databse...")
         columns = ", ".join(f'"{col}"' for col in Security.__annotations__)
         sql = f"""
             SELECT {columns}
