@@ -4,111 +4,33 @@ import os
 import random
 import sys
 import time
-from typing import TypedDict
+import zoneinfo
 
-import pandas as pd
 from dotenv import load_dotenv
 
-from collector.mongodb_handler import MongoHandler
-from collector.security_crawler import SecurityCrawler, ResponseError, HTTPError
-
-
-class ListingDocument(TypedDict):
-    有價證券代號: str
-    有價證券名稱: str
-    市場別: str
-    有價證券別: str
-    產業別: str
-    CFICode: str
-    備註: str
-
-
-class TimeseriesDocument(TypedDict):
-    code: str
-    opening_price: float
-    closing_price: float
-    lowest_price: float
-    highest_price: float
-    price_change: str
-    trade_count: int
-    trade_shares: int
-    trade_value: int
-    timestamp: datetime.datetime
-    note: str
-
+from collector.postgres_handler import PostgresConnectionError, PostgresHandler
+from collector.security_crawler import FetchDailyBarsError, SecurityCrawler
 
 load_dotenv()
-MONGODB_URL = os.environ.get("MONGODB_URL")
+POSTGRES_URL = os.environ.get("POSTGRES_URL")
 TRACEABLE_DATE = datetime.date(2010, 1, 4)
-TODAY = datetime.date.today()
+TIMEZONE = zoneinfo.ZoneInfo("Asia/Taipei")
+TODAY = datetime.datetime.now(tz=TIMEZONE).date()
 MIN_CYCLE_SECONDS = 7
 MAX_CYCLE_SECONDS = 14
-FETCH_RETRY_BACKOFF = [360, 360, 360, 360, 360]
 
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stdout,
-    encoding="utf-8",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("run.log", encoding="utf-8"),
+    ],
 )
 
 logger = logging.getLogger(__name__)
-
-
-class DataFrameConverter:
-    def to_documents(self, df: pd.DataFrame) -> list[ListingDocument]:
-        return [row.to_dict() for _, row in df.iterrows()]
-
-    def to_timeseries(self, df: pd.DataFrame) -> list[TimeseriesDocument]:
-        """
-        Converts TWSE raw DataFrame into a list of TimeseriesDocuments.
-
-        Notes on excluded fields:
-        - '漲跌價差' (Price Change): Excluded due to non-numeric indicators (+, -, X).
-        'X' denotes ex-dividend/ex-rights days, which breaks direct numeric parsing.
-        Derive from 'closing_price' if historical changes are required.
-        - '註記' (Notes): Omitted because it is missing from certain TWSE API
-        responses, causing KeyErrors. It also holds low quantitative value
-        (used mainly for rare events like stock splits or par value changes).
-        """
-        docs = []
-        for _, row in df.iterrows():
-            # Skip non-trading days (e.g. 0051) where all price fields are "--":
-            # ["日期",       "成交股數", "成交金額", "開盤價", "最高價", "最低價", "收盤價", "漲跌價差", "成交筆數", "註記"]
-            # ["107/03/31",        "0",       "0",     "--",    "--",    "--",     "--",   " 0.00",       "0",     ""]
-            if row["開盤價"] == row["收盤價"] == row["最低價"] == row["最高價"] == "--":
-                date = self._roc_date_to_datetime(row["日期"]).date()
-                msg = f"Skipping non-trading day for {row['code']} on {date}"
-                logger.warning(msg)
-                continue
-
-            docs.append(
-                {
-                    "code": row["code"],
-                    "opening_price": float(self._remove_separator(row["開盤價"])),
-                    "closing_price": float(self._remove_separator(row["收盤價"])),
-                    "lowest_price": float(self._remove_separator(row["最低價"])),
-                    "highest_price": float(self._remove_separator(row["最高價"])),
-                    "price_change": row["漲跌價差"],
-                    "trade_count": int(self._remove_separator(row["成交筆數"])),
-                    "trade_shares": int(self._remove_separator(row["成交股數"])),
-                    "trade_value": int(self._remove_separator(row["成交金額"])),
-                    "timestamp": self._roc_date_to_datetime(row["日期"]),
-                    "note": row["註記"],
-                }
-            )
-        return docs
-
-    @staticmethod
-    def _remove_separator(value: str) -> str:
-        return value.replace(",", "")
-
-    @staticmethod
-    def _roc_date_to_datetime(roc_date: str) -> datetime.datetime:
-        year, month, day = map(int, roc_date.split("/"))
-        return datetime.datetime(year + 1911, month, day)
 
 
 def next_month(_date: datetime.date) -> datetime.date:
@@ -126,63 +48,67 @@ def throttle(elapsed: float) -> None:
 
 def main():
     logger.info("Initializing Taiwan stock crawling pipeline...")
-
-    mongo = MongoHandler(url=MONGODB_URL)
     crawler = SecurityCrawler()
-    converter = DataFrameConverter()
+    postgres = PostgresHandler(url=POSTGRES_URL)
 
-    # Fetch and sync listings
-    listings_df = crawler.fetch_listings()
-    listings_count = len(listings_df)
-    mongo.upload_listings(converter.to_documents(listings_df))
-    logger.info(f"Synchronized {listings_count} security listings.")
+    # Fetch and upload securities
+    securities = crawler.fetch_securities()
+    postgres.upload_securities(securities)
 
-    listings = mongo.cl_listings.find().to_list()
-
-    for idx, doc in enumerate(listings, 1):
-        code = doc["有價證券代號"]
-        birth_date = mongo.get_birth_date(code)
-        record_date = mongo.get_record_date(code) or TRACEABLE_DATE
-        fetch_date = max(birth_date, record_date, TRACEABLE_DATE)
+    # Fetch and upload daily bars
+    securities = postgres.fetch_securities()
+    securities_count = len(securities)
+    for idx, security in enumerate(securities, 1):
+        security_code = security["security_code"]
+        listing_date = security["listing_date"]
+        record_date = postgres.get_record_date(security_code) or TRACEABLE_DATE
+        fetch_date = max(listing_date, record_date, TRACEABLE_DATE)
 
         if fetch_date >= TODAY:
             continue
 
-        logger.info(f"[{idx}/{listings_count}] Processing {code}")
+        logger.info(f"[{idx}/{securities_count}] Processing {security_code}")
 
         while fetch_date < TODAY:
-            date_str = fetch_date.strftime("%Y-%m")
+            fetch_date_str = fetch_date.strftime("%Y-%m")
+            t0 = time.time()
             success = False
 
-            for backoff in FETCH_RETRY_BACKOFF:
-                t0 = time.time()
-                try:
-                    prices = crawler.fetch_monthly_prices(code=code, date_tgt=fetch_date)
-                    if prices.empty:
-                        logger.warning(f"No data returned for {code} in {date_str}")
-                        success = True
-                        break
-
-                    count = mongo.insert_absent_docs(converter.to_timeseries(prices))
-                    logger.info(f"Uploaded {count} daily prices for {code} in {date_str}")
+            try:
+                daily_bars = crawler.fetch_daily_bars(security_code, fetch_date)
+                if not daily_bars:
+                    logger.warning(
+                        f"No data returned for {security_code} in {fetch_date_str}"
+                    )
                     success = True
                     break
-                except (ResponseError, HTTPError) as e:
-                    logger.warning(f"Failed attempt for {code} in {date_str}. Backoff: {backoff}.\n\n{str(e)}\n")
-                    time.sleep(backoff)
-                    continue
-                except Exception as e:
-                    logger.exception(f"Unexpected error for {code} in {date_str}")
-                    break
 
-            if not success:
-                logger.error(f"Stopped for {code} in {date_str}")
-                sys.exit(1)
+                inserted_count = postgres.upload_daily_bars(daily_bars)
+                logger.info(
+                    f"Uploaded {inserted_count} daily bars for {security_code} in {fetch_date_str}."
+                )
+
+                success = True
+            except FetchDailyBarsError as e:
+                logger.error(
+                    f"Failed to fetch daily bars for {security_code} in {fetch_date_str}.\n\n{e}\n"
+                )
+                break
+            except PostgresConnectionError as e:
+                logger.error(
+                    f"Postgres connection error while processing {security_code} in {fetch_date_str}.\n\n{e}\n"
+                )
+                break
 
             fetch_date = next_month(fetch_date)
             throttle(elapsed=time.time() - t0)
 
-    mongo.close()
+        if not success:
+            logger.info("Aborting pipeline...")
+            postgres.close()
+            sys.exit(1)
+
+    postgres.close()
     logger.info("Pipeline execution completed successfully.")
 
 
