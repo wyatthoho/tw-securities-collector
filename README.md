@@ -1,6 +1,6 @@
 # TW Securities Collector
 
-Crawls TWSE-listed securities and their daily trading bars into PostgreSQL.
+Crawls TWSE-listed securities, their daily trading bars, and corporate action events (ex-rights/ex-dividend, stock splits) into PostgreSQL.
 
 ## Requirements
 - Python >= 3.12
@@ -23,11 +23,15 @@ POSTGRES_URL=postgresql://user:password@host:port/dbname
 ## Usage
 
 ```bash
-collector
+collector                      # securities + daily bars
+corporate-actions-collector    # ex-rights/ex-dividend + split events
 ```
 
 ## GitHub Actions
 
-Runs daily via [.github/workflows/main.yml](.github/workflows/main.yml). Add `POSTGRES_URL` as a repository secret:
+- `daily-collector` runs daily via [.github/workflows/daily.yml](.github/workflows/main.yml).
+- `corporate-actions-collector` runs on its own schedule via [.github/workflows/corporate_actions.yml](.github/workflows/corporate_actions.yml).
+
+Both workflows read `POSTGRES_URL` from a repository secret:
 
 Settings > Secrets and variables > Actions > New repository secret

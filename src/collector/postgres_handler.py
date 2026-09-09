@@ -8,10 +8,14 @@ import psycopg2
 import psycopg2.extras
 from psycopg2 import InterfaceError, OperationalError
 
+from collector.ex_rights_crawler import ExRightsEvent
 from collector.security_crawler import DailyBar, Security
+from collector.split_crawler import SplitEvent
 
 TABLE_SECURITIES = "securities"
 TABLE_DAILY_BARS = "daily_bars"
+TABLE_EX_RIGHTS_EVENTS = "ex_rights_events"
+TABLE_SPLIT_EVENTS = "split_events"
 MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 3
 
@@ -132,6 +136,70 @@ class PostgresHandler:
             inserted = cur.fetchall()
 
         return len(inserted)
+
+    @with_retry
+    def upload_ex_rights_events(self, events: list[ExRightsEvent]) -> int:
+        if not events:
+            return 0
+
+        columns = ", ".join(ExRightsEvent.__annotations__)
+        sql = f"""
+            INSERT INTO {TABLE_EX_RIGHTS_EVENTS} ({columns})
+            VALUES %s
+            ON CONFLICT (security_code, event_date) DO NOTHING
+            RETURNING security_code
+        """
+        values = [tuple(event[col] for col in event) for event in events]
+
+        with self.conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, values)
+            inserted = cur.fetchall()
+
+        return len(inserted)
+
+    @with_retry
+    def get_last_ex_rights_date(self, security_code: str) -> datetime.date | None:
+        sql = f"""
+            SELECT MAX(event_date)
+            FROM {TABLE_EX_RIGHTS_EVENTS}
+            WHERE security_code = %s
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(sql, (security_code,))
+            row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+    @with_retry
+    def upload_split_events(self, events: list[SplitEvent]) -> int:
+        if not events:
+            return 0
+
+        columns = ", ".join(SplitEvent.__annotations__)
+        sql = f"""
+            INSERT INTO {TABLE_SPLIT_EVENTS} ({columns})
+            VALUES %s
+            ON CONFLICT (security_code, event_date) DO NOTHING
+            RETURNING security_code
+        """
+        values = [tuple(event[col] for col in event) for event in events]
+
+        with self.conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, sql, values)
+            inserted = cur.fetchall()
+
+        return len(inserted)
+
+    @with_retry
+    def get_last_split_date(self, security_code: str) -> datetime.date | None:
+        sql = f"""
+            SELECT MAX(event_date)
+            FROM {TABLE_SPLIT_EVENTS}
+            WHERE security_code = %s
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(sql, (security_code,))
+            row = cur.fetchone()
+        return row[0] if row and row[0] else None
 
     def close(self) -> None:
         self.conn.close()

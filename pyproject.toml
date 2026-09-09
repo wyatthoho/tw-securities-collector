@@ -18,7 +18,8 @@ readme = "README.md"
 license = { file = "LICENSE" }
 
 [project.scripts]
-collector = "collector.main:main"
+daily-collector = "collector.daily_main:main"
+corporate-actions-collector = "collector.corporate_actions_main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
