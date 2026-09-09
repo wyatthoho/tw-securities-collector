@@ -23,4 +23,4 @@ jobs:
       - name: execute py script
         env:
           POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-        run: collector
+        run: daily-collector
