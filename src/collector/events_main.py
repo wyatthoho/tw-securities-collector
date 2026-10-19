@@ -21,7 +21,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("run_corporate_actions.log", encoding="utf-8"),
+        logging.FileHandler("run_events.log", encoding="utf-8"),
     ],
 )
 
@@ -49,7 +49,7 @@ def run_split(crawler: SplitCrawler, postgres: PostgresHandler) -> None:
 
 
 def main():
-    logger.info("Initializing corporate actions crawling pipeline...")
+    logger.info("Initializing events pipeline...")
     ex_rights_crawler = ExRightsCrawler()
     split_crawler = SplitCrawler()
     postgres = PostgresHandler(url=POSTGRES_URL)

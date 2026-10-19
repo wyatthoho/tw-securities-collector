@@ -26,7 +26,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("run.log", encoding="utf-8"),
+        logging.FileHandler("run_trading.log", encoding="utf-8"),
     ],
 )
 
@@ -47,7 +47,7 @@ def throttle(elapsed: float) -> None:
 
 
 def main():
-    logger.info("Initializing Taiwan stock crawling pipeline...")
+    logger.info("Initializing trading pipeline...")
     crawler = SecurityCrawler()
     postgres = PostgresHandler(url=POSTGRES_URL)
 
