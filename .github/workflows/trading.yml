@@ -1,10 +1,10 @@
-name: daily
+name: trading
 on:
   schedule:
     - cron: "0 8 * * *"
   workflow_dispatch:
 jobs:
-  build:
+  collect:
     runs-on: ubuntu-latest
     steps:
       - name: checkout repo content
@@ -23,4 +23,4 @@ jobs:
       - name: execute py script
         env:
           POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
-        run: daily-collector
+        run: trading-collector

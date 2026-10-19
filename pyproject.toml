@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tw-securities-collector"
 version = "0.1.0"
-description = "Crawl and plot the data from Taiwan stock exchange weighted index."
+description = "Collect TWSE securities, daily trading bars, and corporate action events into PostgreSQL."
 authors = [{ name = "wyatthoho", email = "wyatthoho@gmail.com" }]
 dependencies = [
     "beautifulsoup4 >= 4.12.0",
@@ -18,8 +18,8 @@ readme = "README.md"
 license = { file = "LICENSE" }
 
 [project.scripts]
-daily-collector = "collector.daily_main:main"
-corporate-actions-collector = "collector.corporate_actions_main:main"
+trading-collector = "collector.trading_main:main"
+events-collector = "collector.events_main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -23,14 +23,14 @@ POSTGRES_URL=postgresql://user:password@host:port/dbname
 ## Usage
 
 ```bash
-collector                      # securities + daily bars
-corporate-actions-collector    # ex-rights/ex-dividend + split events
+trading-collector    # securities + daily trading bars
+events-collector     # corporate action events: ex-rights/ex-dividend + splits
 ```
 
 ## GitHub Actions
 
-- `daily-collector` runs daily via [.github/workflows/daily.yml](.github/workflows/main.yml).
-- `corporate-actions-collector` runs on its own schedule via [.github/workflows/corporate_actions.yml](.github/workflows/corporate_actions.yml).
+- `trading-collector` runs daily via [.github/workflows/trading.yml](.github/workflows/trading.yml).
+- `events-collector` runs daily via [.github/workflows/events.yml](.github/workflows/events.yml).
 
 Both workflows read `POSTGRES_URL` from a repository secret:
 
